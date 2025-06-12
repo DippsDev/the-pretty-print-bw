@@ -1,4 +1,4 @@
-import { supabase } from '../../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
 

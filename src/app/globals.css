@@ -1,8 +1,29 @@
 @import "tailwindcss";
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+.nav-blur {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.menu-item {
+  @apply transition-all duration-300 ease-in-out;
+}
+
+.menu-item:hover {
+  @apply text-black;
+}
+
+.menu-item-blur {
+  @apply text-gray-400;
 }
 
 @theme inline {
@@ -20,7 +41,5 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-background text-foreground antialiased;
 }
