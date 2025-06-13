@@ -29,7 +29,7 @@ export default function RootLayout({
             src="/bird.png"
             alt="Bird"
             fill
-            className="fixed left-0 top-0 w-full h-full object-cover z-[100] pointer-events-none select-none"
+            className="fixed left-0 top-0 mt-[156px] w-full h-[678px] object-cover z-[100] pointer-events-none select-none"
             priority
             draggable={false}
             style={{ pointerEvents: "none", userSelect: "none" }}
