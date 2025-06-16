@@ -4,6 +4,31 @@ import React, { useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { setCurrentPage, setNavbarOpen, toggleNavbar } from '@/redux/features/navigationSlice';
 import type { RootState } from '@/redux/store';
+import Lottie from "lottie-react";
+import menuIconAnimation from "@/animations/menu icon animation.json";
+import localFont from 'next/font/local';
+
+const fsBrabo = localFont({
+  src: [
+    {
+      path: '../../src/fonts/FS Brabo Pro Regular.otf',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../../src/fonts/FS Brabo Pro SemiBold.otf',
+      weight: '600',
+      style: 'normal',
+    },
+    {
+      path: '../../src/fonts/FS Brabo Pro SemiBold Italic.otf',
+      weight: '600',
+      style: 'italic',
+    },
+  ],
+  variable: '--font-fsbrabo',
+  display: 'swap',
+});
 
 const SERVICES = [
   {
@@ -42,6 +67,38 @@ const Navbar = () => {
   const [selectedService, setSelectedService] = useState(0);
   const dispatch = useDispatch();
   const navRef = useRef<HTMLDivElement>(null);
+  const lottieRef = useRef<any>(null);
+
+  // On mount, set to hamburger (frame 0)
+  React.useEffect(() => {
+    if (lottieRef.current) {
+      lottieRef.current.goToAndStop(0, true);
+    }
+  }, []);
+
+  // Play correct segment on nav state change
+  React.useEffect(() => {
+    if (!lottieRef.current) return;
+    lottieRef.current.setSpeed(2.2); // Fast and responsive
+    if (isOpen) {
+      // Hamburger to X (frames 0 to 74)
+      lottieRef.current.playSegments([0, 74], true);
+    } else {
+      // X to Hamburger (frames 74 to 0)
+      lottieRef.current.playSegments([74, 0], true);
+    }
+  }, [isOpen]);
+
+  // Lottie menu icon (controlled by ref, no key, no initialSegment)
+  const MenuLottieIcon = () => (
+    <Lottie
+      lottieRef={lottieRef}
+      animationData={menuIconAnimation}
+      loop={false}
+      autoplay={false}
+      style={{ width: 24, height: 24 }}
+    />
+  );
 
   const menuItems = ['Home', 'About', 'Services', 'Promotions'];
 
@@ -58,28 +115,6 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [isOpen, dispatch]);
 
-  // Custom 2-line animated menu/X icon (24x24px), lines meet perfectly in the center, smooth transitions
-  const MenuIcon = ({ open }: { open: boolean }) => (
-    <div className="relative w-6 h-6 flex items-center justify-center" style={{ width: 24, height: 24 }}>
-      <span
-        className={`absolute left-0 w-4 h-[1px] bg-black transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
-          ${open ? "rotate-45 top-1/2" : "top-[8px] rotate-0"}
-        `}
-        style={{
-          transformOrigin: "50% 50%",
-        }}
-      />
-      <span
-        className={`absolute left-0 w-4 h-[1px] bg-black transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
-          ${open ? "-rotate-45 top-1/2" : "top-[16px] rotate-0"}
-        `}
-        style={{
-          transformOrigin: "50% 50%",
-        }}
-      />
-    </div>
-  );
-
   // Contact button styles
   const contactBtn =
     "w-full mt-auto py-1 px-0 rounded-sm text-center font-semibold text-[1rem] transition-all duration-200 " +
@@ -94,13 +129,23 @@ const Navbar = () => {
   };
 
   // Responsive width for nav: wider when servicesOpen
+  // Adjust for mobile/tablet
   const navWidth = servicesOpen
     ? "min(90vw, 540px)"
     : "min(60vw, 320px)";
 
+  // Responsive: adjust width for mobile/tablet
+  const getNavWidth = () => {
+    if (typeof window !== "undefined") {
+      if (window.innerWidth < 640) return servicesOpen ? "90vw" : "80vw";
+      if (window.innerWidth < 1024) return servicesOpen ? "70vw" : "50vw";
+    }
+    return navWidth;
+  };
+
   return (
     <>
-      {/* Menu icon: just lines, no background, always on top */}
+      {/* Menu icon: Lottie animation */}
       <button
         onClick={() => {
           if (isOpen) {
@@ -115,14 +160,19 @@ const Navbar = () => {
         aria-label="Open navigation"
         style={{ background: "none", boxShadow: "none" }}
       >
-        <MenuIcon open={isOpen} />
+        <MenuLottieIcon />
       </button>
       {/* Divider below menu icon */}
       <div
-        className={`fixed left-6 z-[91] top-[56px] w-[calc(${navWidth}-1.5rem)] h-[1px] bg-white/60
+        className={`fixed left-6 z-[91] top-[56px] h-[1px] bg-white/60
           transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)] ${isOpen ? "opacity-100" : "opacity-0"}
         `}
-        style={{ pointerEvents: "none", marginLeft: "0.25rem" }}
+        style={{
+          pointerEvents: "none",
+          marginLeft: "0.25rem",
+          width: `calc(${getNavWidth()} - 1.5rem)`,
+          maxWidth: "calc(100vw - 2rem)",
+        }}
       />
 
       {/* Sliding navbar panel */}
@@ -132,10 +182,11 @@ const Navbar = () => {
           transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           overflow-hidden
+          ${fsBrabo.className}
         `}
         style={{
-          width: isOpen ? (servicesOpen ? "min(90vw, 540px)" : "min(60vw, 320px)") : 0,
-          minWidth: isOpen ? (servicesOpen ? "340px" : "220px") : 0,
+          width: isOpen ? getNavWidth() : 0,
+          minWidth: isOpen ? (servicesOpen ? "220px" : "160px") : 0,
           maxWidth: "100vw",
           marginLeft: isOpen ? "max(env(safe-area-inset-left, 0px), 0.5rem)" : 0,
         }}

@@ -1,13 +1,32 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "@/redux/provider";
 import Navbar from "@/components/Navbar";
-import Image from "next/image";
+import BackgroundImage from "@/components/BackgroundImage";
 import MainContentOverlay from "@/components/MainContentOverlay";
 
-const geist = Geist({
-  subsets: ["latin"],
+// Import your local font(s)
+const fsBrabo = localFont({
+  src: [
+    {
+      path: "../fonts/FS Brabo Pro Regular.otf",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../fonts/FS Brabo Pro SemiBold.otf",
+      weight: "600",
+      style: "normal",
+    },
+    {
+      path: "../fonts/FS Brabo Pro SemiBold Italic.otf",
+      weight: "600",
+      style: "italic",
+    },
+  ],
+  variable: "--font-fsbrabo",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -21,19 +40,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geist.className} bg-white/90 relative overflow-hidden`}>
+    <html lang="en" className={fsBrabo.className}>
+      <body className={`bg-white/90 relative overflow-hidden`}>
         <Providers>
-          {/* Bird image: fixed, fills viewport, always on top */}
-          <Image
-            src="/bird.png"
-            alt="Bird"
-            fill
-            className="fixed left-0 top-0 mt-[156px] w-full h-[678px] object-cover z-[100] pointer-events-none select-none"
-            priority
-            draggable={false}
-            style={{ pointerEvents: "none", userSelect: "none" }}
-          />
+          <BackgroundImage />
           <Navbar />
           <main className="bg-white h-[100dvh] w-[100dvw]">
             <MainContentOverlay>{children}</MainContentOverlay>

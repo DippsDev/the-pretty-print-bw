@@ -4,6 +4,29 @@ import React from "react";
 import { useSelector, useDispatch } from "react-redux";
 import type { RootState } from "@/redux/store";
 import { setNavbarOpen } from "@/redux/features/navigationSlice";
+import localFont from "next/font/local";
+
+const fsBrabo = localFont({
+  src: [
+    {
+      path: "../fonts/FS Brabo Pro Regular.otf",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../fonts/FS Brabo Pro SemiBold.otf",
+      weight: "600",
+      style: "normal",
+    },
+    {
+      path: "../fonts/FS Brabo Pro SemiBold Italic.otf",
+      weight: "600",
+      style: "italic",
+    },
+  ],
+  variable: "--font-fsbrabo",
+  display: "swap",
+});
 
 export default function MainContentOverlay({ children }: { children: React.ReactNode }) {
   const navbarOpen = useSelector((state: RootState) => state.navigation.navbarOpen);
@@ -22,7 +45,7 @@ export default function MainContentOverlay({ children }: { children: React.React
         aria-hidden="true"
       />
       {/* Main content, always visible, but under the overlay */}
-      <div className="relative z-0">{children}</div>
+      <div className={`relative z-0 ${fsBrabo.className}`}>{children}</div>
     </>
   );
 }
