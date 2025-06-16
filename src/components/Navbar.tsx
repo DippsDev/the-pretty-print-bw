@@ -7,6 +7,7 @@ import type { RootState } from '@/redux/store';
 import Lottie from "lottie-react";
 import menuIconAnimation from "@/animations/menu icon animation.json";
 import localFont from 'next/font/local';
+import { LottieRefCurrentProps } from "lottie-react";
 
 const fsBrabo = localFont({
   src: [
@@ -67,7 +68,7 @@ const Navbar = () => {
   const [selectedService, setSelectedService] = useState(0);
   const dispatch = useDispatch();
   const navRef = useRef<HTMLDivElement>(null);
-  const lottieRef = useRef<any>(null);
+  const lottieRef = useRef<LottieRefCurrentProps>(null);
 
   // On mount, set to hamburger (frame 0)
   React.useEffect(() => {
