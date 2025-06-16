@@ -210,7 +210,7 @@ const Navbar = () => {
                         setServicesOpen(true);
                       } else {
                         dispatch(setCurrentPage(item.toLowerCase()));
-                        dispatch(setNavbarOpen(false));
+                        dispatch(setNavbarOpen(false)); // Only close nav when clicking, not hovering
                       }
                     }}
                     className={`menu-item ml-4 text-sm font-medium ${
