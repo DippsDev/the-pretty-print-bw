@@ -3,6 +3,7 @@
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/redux/store';
 import ContactPage from '@/components/ContactPage';
+import ServicesPage from '@/components/ServicesPage';
 import localFont from 'next/font/local';
 
 const fsBrabo = localFont({
@@ -52,6 +53,15 @@ export default function Home() {
         `}
       >
         <ContactPage />
+      </div>
+
+      {/* Services page content */}
+      <div 
+        className={`absolute inset-0 transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)]
+          ${currentPage === 'services' ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-[20px] pointer-events-none'}
+        `}
+      >
+        <ServicesPage />
       </div>
     </div>
   );
