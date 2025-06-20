@@ -1,30 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import localFont from "next/font/local";
 import { Inter } from "next/font/google";
-
-const fsBrabo = localFont({
-  src: [
-    {
-      path: '../../src/fonts/FS Brabo Pro Regular.otf',
-      weight: '400',
-      style: 'normal',
-    },
-    {
-      path: '../../src/fonts/FS Brabo Pro SemiBold.otf',
-      weight: '600',
-      style: 'normal',
-    },
-    {
-      path: '../../src/fonts/FS Brabo Pro SemiBold Italic.otf',
-      weight: '600',
-      style: 'italic',
-    },
-  ],
-  variable: '--font-fsbrabo',
-  display: 'swap',
-});
 
 const inter = Inter({ subsets: ["latin"], weight: "400" });
 

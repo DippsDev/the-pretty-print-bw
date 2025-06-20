@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import localFont from "next/font/local";
 import { Inter } from "next/font/google";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/redux/store";
