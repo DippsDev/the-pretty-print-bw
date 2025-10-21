@@ -2,8 +2,8 @@
 
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/redux/store';
-import ContactPage from '@/components/ContactPage';
-import ServicesPage from '@/components/ServicesPage';
+import ContactPage from '@/app/pages/ContactPage';
+import ServicesPage from '@/app/pages/ServicesPage';
 import localFont from 'next/font/local';
 
 const fsBrabo = localFont({

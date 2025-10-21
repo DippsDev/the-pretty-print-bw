@@ -6,9 +6,12 @@ import { useSelector } from "react-redux";
 import type { RootState } from "@/redux/store";
 import { ContactForm } from "./ContactPage";
 import { SERVICES } from "@/lib/servicesData";
-import ServiceModal from "./ServiceModal";
-import ProfessionalSelection from "./ProfessionalSelection";
-import TimeSelectionModal from "./TimeSelectionModal";
+import ServiceModal from "../../components/steps/ServiceSelection";
+import ProfessionalSelectionModal, { Professional } from "../../components/modals/ProfessionalSelectionModal";
+import TimeSelectionModal from "../../components/steps/TimeSelection";
+import ProfessionalSelection from "../../components/steps/ProfessionalSelection";
+import ProfessionalPerServiceStep from "../../components/steps/ProfessionalPerServiceStep";
+import { motion, AnimatePresence } from "framer-motion";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
@@ -80,7 +83,12 @@ function ServicesPage() {
   const [bookings, setBookings] = useState<
     { name: string; option: string; time: string; price: string }[]
   >([]);
-  const [step, setStep] = useState<'services' | 'professionals' | 'time'>('services');
+  const [step, setStep] = useState<'services' | 'professionals' | 'professionalPerService' | 'time'>('services');
+  const [professionalMode, setProfessionalMode] = useState<'single' | 'perService'>('single');
+  const [selectedProfessional, setSelectedProfessional] = useState<number>(0);
+  const [selectedProfessionals, setSelectedProfessionals] = useState<{ [bookingIdx: number]: number | undefined }>({});
+  const [professionalModalOpen, setProfessionalModalOpen] = useState(false);
+  const [activeProfessionalIdx, setActiveProfessionalIdx] = useState<number | null>(null);
 
   // Helper to get service options for modal (simulate options for demo)
   function getServiceModalData(svc: any) {
@@ -135,11 +143,30 @@ function ServicesPage() {
   function handleAddBooking(booking: { name: string; option: string; time: string; price: string }) {
     setBookings(prev => [...prev, booking]);
     setModalOpen(false);
+    // Assign no professional for new booking (undefined)
+    setSelectedProfessionals(prev => ({
+      ...prev,
+      [bookings.length]: undefined
+    }));
   }
 
   // Remove booking handler
   function handleRemoveBooking(idx: number) {
     setBookings(prev => prev.filter((_, i) => i !== idx));
+    setSelectedProfessionals(prev => {
+      const updated = { ...prev };
+      delete updated[idx];
+      // Shift keys for remaining bookings
+      const newSelected: { [bookingIdx: number]: number | undefined } = {};
+      let j = 0;
+      for (let i = 0; i < bookings.length; i++) {
+        if (i !== idx) {
+          newSelected[j] = updated[i];
+          j++;
+        }
+      }
+      return newSelected;
+    });
   }
 
   // Calculate total price
@@ -149,11 +176,30 @@ function ServicesPage() {
   }
   const total = bookings.reduce((sum, b) => sum + parsePrice(b.price), 0);
 
+  // Step navigation logic for progress tracker
+  function canGoToStep(idx: number) {
+    if (idx === 0) return true; // Always can go to services
+    if (idx === 1) return bookings.length > 0; // Can go to professionals if bookings exist
+    if (idx === 2) return bookings.length > 0 && selectedProfessional !== null; // Can go to time if professional selected
+    return false;
+  }
+
+  // Right side continue button logic
+  function handleContinue() {
+    if (bookings.length === 0) return;
+    if (step === 'services') setStep('professionals');
+    else if (step === 'professionals') {
+      if (professionalMode === 'perService') setStep('professionalPerService');
+      else setStep('time');
+    }
+    else if (step === 'professionalPerService') setStep('time');
+  }
+
   return (
     <div className={`relative w-full min-h-[100dvh] bg-white ${interTight.className}`} style={{overflowY: 'auto', maxHeight: '100dvh'}}>
       <div className="flex flex-row w-full min-h-[100dvh]">
         {/* Main content (left side + center) */}
-        <div className="flex-1 flex flex-col px-4 py-8">
+        <div className="flex-1 flex flex-col px-8 py-8">
           {/* Progress tracker */}
           <div className="w-full flex mb-8 mt-16">
             <ul className="flex flex-row gap-0 items-center pl-1">
@@ -164,13 +210,27 @@ function ServicesPage() {
                 { label: 'Confirm' },
               ].map((stepObj, idx) => (
                 <li key={stepObj.label} className="flex items-center">
-                  <span className={`font-medium text-sm whitespace-nowrap transition-colors ${
-                    (step === 'services' && idx === 0) || (step === 'professionals' && idx === 1)
-                      ? 'text-[#141414]'
-                      : 'text-[#7B8487]'
-                  }`}>
+                  <button
+                    className={`font-medium text-sm whitespace-nowrap transition-colors px-0 bg-transparent border-none outline-none ${
+                      step === 'services' && idx === 0 ||
+                      step === 'professionals' && idx === 1 ||
+                      step === 'time' && idx === 2
+                        ? 'text-[#141414]'
+                        : canGoToStep(idx) ? 'text-[#7B8487] hover:text-[#232323] cursor-pointer' : 'text-[#d1d5db] cursor-not-allowed'
+                    }`}
+                    style={{ padding: 0, margin: 0 }}
+                    disabled={!canGoToStep(idx)}
+                    onClick={() => {
+                      if (!canGoToStep(idx)) return;
+                      if (idx === 0) setStep('services');
+                      if (idx === 1) setStep('professionals');
+                      if (idx === 2) setStep('time');
+                      // Confirm step not implemented
+                    }}
+                    type="button"
+                  >
                     {stepObj.label}
-                  </span>
+                  </button>
                   {idx < 3 && (
                     <span className="mx-2" aria-hidden="true">
                       <svg fill="currentColor" width="18" height="18" viewBox="0 0 32 32"><path fillRule="evenodd" d="M19.957 9.043a1 1 0 0 1 0 1.414L14.414 16l5.543 5.543a1 1 0 0 1-1.414 1.414l-6.25-6.25a1 1 0 0 1 0-1.414l6.25-6.25a1 1 0 0 1 1.414 0" clipRule="evenodd"></path></svg>
@@ -288,13 +348,36 @@ function ServicesPage() {
           ) : step === 'professionals' ? (
             <div className="flex flex-col gap-6 flex-1">
               <h2 className="text-2xl font-bold mb-2 text-[#141414]">Select Professional</h2>
-              <ProfessionalSelection onBack={() => setStep('services')} />
+              <ProfessionalSelection
+                onBack={() => setStep('services')}
+                onSelect={id => {
+                  setSelectedProfessional(id);
+                  setProfessionalMode('single');
+                }}
+                selectedProfessional={selectedProfessional}
+                onSelectPerService={() => {
+                  setProfessionalMode('perService');
+                  setStep('professionalPerService');
+                }}
+                professionalMode={professionalMode}
+              />
             </div>
+          ) : step === 'professionalPerService' ? (
+            <ProfessionalPerServiceStep
+              bookings={bookings}
+              selectedProfessionals={selectedProfessionals}
+              setSelectedProfessionals={setSelectedProfessionals}
+              onBack={() => {
+                setStep('professionals');
+                setProfessionalMode('single');
+              }}
+              onContinue={() => setStep('time')}
+            />
           ) : step === 'time' ? (
             <div className="flex flex-col gap-6 flex-1">
-              <h2 className="text-2xl font-bold mb-2 text-[#141414]">Select time</h2>
+              <h2 className="text-3xl font-bold mb-2 text-[#141414]">Select time</h2>
               <TimeSelectionModal
-                onBack={() => setStep('professionals')}
+                onBack={() => { setProfessionalMode('single'); setStep('professionals'); }}
                 onContinue={({ date, time }) => {
                   // TODO: Go to confirm step or handle booking
                 }}
@@ -302,7 +385,41 @@ function ServicesPage() {
                   [new Date().toISOString().slice(0,10)]: ["09:00", "10:00", "11:00", "14:00"],
                   [(() => { const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })()]: ["10:00", "13:00", "15:00"]
                 }}
+                onOpenProfessionalModal={() => setProfessionalModalOpen(true)}
+                professionalMode={professionalMode}
               />
+              {/* ProfessionalSelectionModal with AnimatePresence for smooth transitions */}
+              <AnimatePresence>
+                {professionalModalOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.25 }}
+                    style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+                  >
+                    <ProfessionalSelectionModal
+                      open={professionalModalOpen}
+                      onClose={() => setProfessionalModalOpen(false)}
+                      selectedProfessional={selectedProfessional}
+                      onSelect={(id: number) => {
+                        setSelectedProfessional(id);
+                        setProfessionalModalOpen(false);
+                      }}
+                      professionals={[
+                        {
+                          id: 0,
+                          name: "Any professional",
+                          role: "for maximum availability",
+                          avatar: null,
+                          isGroup: true,
+                        },
+                        // Add more professionals here if needed
+                      ]}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           ) : null}
         </div>
@@ -327,6 +444,34 @@ function ServicesPage() {
                         <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
                           <span className="text-[#141414] font-medium text-sm truncate max-w-[140px]" title={b.option}>{b.option}</span>
                           <span className="text-xs text-[#232323]/70">{b.time}</span>
+                          {/* Professional name below time, clickable only in time step */}
+                          {step === 'time' ? (
+                            <span
+                              className="text-xs text-[#33383C] underline cursor-pointer mt-1"
+                              onClick={() => {
+                                setActiveProfessionalIdx(i);
+                                setProfessionalModalOpen(true);
+                              }}
+                            >
+                              {selectedProfessionals[i] !== undefined
+                                ? (
+                                  [
+                                    {
+                                      id: 0,
+                                      name: "Any professional",
+                                      role: "for maximum availability",
+                                      avatar: null,
+                                      isGroup: true,
+                                    },
+                                    // Add more professionals here if needed
+                                  ].find(p => p.id === selectedProfessionals[i])?.name || "Any professional"
+                                )
+                                : <span className="text-[#b0b0b0]">Select professional</span>
+                              }
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[#b0b0b0] mt-1">Any professional</span>
+                          )}
                         </div>
                         <span className="font-semibold text-[#232323] text-sm text-right" style={{minWidth: 64, display: 'inline-block'}}>{b.price}</span>
                         <button
@@ -357,26 +502,73 @@ function ServicesPage() {
               className={`py-2 px-8 rounded-full font-semibold text-base mt-2 ${bookings.length > 0 ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]" : "bg-gray-300 text-gray-600 cursor-not-allowed"}`}
               style={{ width: 'auto', alignSelf: 'flex-end' }}
               disabled={bookings.length === 0}
-              onClick={() => {
-                if (bookings.length > 0) {
-                  if (step === 'services') setStep('professionals');
-                  else if (step === 'professionals') setStep('time');
-                }
-              }}
+              onClick={handleContinue}
             >
               Continue
             </button>
           </div>
         </div>
       </div>
-      {/* Service Modal */}
-      <ServiceModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        service={modalService}
-        onAddBooking={handleAddBooking}
-      />
-
+      {/* Service Modal with AnimatePresence for smooth transitions */}
+      <AnimatePresence>
+        {modalOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+          >
+            <ServiceModal
+              open={modalOpen}
+              onClose={() => setModalOpen(false)}
+              service={modalService}
+              onAddBooking={handleAddBooking}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Professional modal for per-booking selection */}
+      <AnimatePresence>
+        {professionalModalOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.25 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 101 }}
+          >
+            <ProfessionalSelectionModal
+              open={professionalModalOpen}
+              onClose={() => setProfessionalModalOpen(false)}
+              selectedProfessional={
+                activeProfessionalIdx !== null && selectedProfessionals[activeProfessionalIdx] !== undefined
+                  ? selectedProfessionals[activeProfessionalIdx]
+                  : null
+              }
+              onSelect={(id: number) => {
+                if (activeProfessionalIdx !== null) {
+                  setSelectedProfessionals(prev => ({
+                    ...prev,
+                    [activeProfessionalIdx]: id
+                  }));
+                }
+                setProfessionalModalOpen(false);
+              }}
+              professionals={[
+                {
+                  id: 0,
+                  name: "Any professional",
+                  role: "for maximum availability",
+                  avatar: null,
+                  isGroup: true,
+                },
+                // Add more professionals here if needed
+              ]}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

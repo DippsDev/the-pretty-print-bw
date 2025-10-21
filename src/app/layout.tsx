@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import "react-day-picker/style.css";
 import { Providers } from "@/redux/provider";
 import Navbar from "@/components/Navbar";
 import BackgroundImage from "@/components/BackgroundImage";
