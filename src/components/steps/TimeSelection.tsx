@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Inter_Tight } from "next/font/google";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
+import ProfessionalPerServiceModal from "../modals/ProfessionalPerService";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
@@ -33,6 +34,10 @@ interface TimeSelectionModalProps {
   availableTimes?: { [isoDate: string]: string[] };
   onOpenProfessionalModal?: () => void;
   professionalMode?: 'single' | 'perService';
+  bookings?: any[];
+  selectedProfessionals?: { [bookingIdx: number]: number | undefined };
+  setSelectedProfessionals?: (bookingIdx: number, id: number | undefined) => void;
+  selectedProfessional?: number; // Add selectedProfessional prop
 }
 
 const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
@@ -41,6 +46,10 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   availableTimes = {},
   onOpenProfessionalModal,
   professionalMode = 'single',
+  bookings,
+  selectedProfessionals,
+  setSelectedProfessionals,
+  selectedProfessional,
 }) => {
   // Track the start date and number of days for the carousel range
   const [carouselStartDate, setCarouselStartDate] = useState<Date>(CALENDAR_START);
@@ -62,6 +71,9 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const calendarIconRef = useRef<HTMLButtonElement>(null);
 
+  // Modal state for per-service modal
+  const [perServiceModalOpen, setPerServiceModalOpen] = useState(false);
+
   useEffect(() => {
     setSelectedDayIdx(0);
     setSelectedTime(null);
@@ -77,6 +89,23 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const safeSelectedDayIdx = Math.max(0, Math.min(selectedDayIdx, days.length - 1));
   const selectedDay = days[safeSelectedDayIdx] ?? days[0];
   const times = selectedDay ? (availableTimes[selectedDay.iso] || []) : [];
+
+  // Call onContinue as soon as a time is selected (prevent infinite loop)
+  const lastSentRef = useRef<{ date: string; time: string } | null>(null);
+  useEffect(() => {
+    if (selectedTime && selectedDay) {
+      const payload = { date: selectedDay.iso, time: selectedTime };
+      // Only call if changed
+      if (
+        !lastSentRef.current ||
+        lastSentRef.current.date !== payload.date ||
+        lastSentRef.current.time !== payload.time
+      ) {
+        onContinue?.(payload);
+        lastSentRef.current = payload;
+      }
+    }
+  }, [selectedTime, selectedDay, onContinue]);
 
   // Scroll to selected day in carousel (always after days update)
   useEffect(() => {
@@ -176,6 +205,18 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const calendarEndMonth = new Date(days[days.length - 1].date.getFullYear(), days[days.length - 1].date.getMonth(), 1);
   calendarEndMonth.setMonth(calendarEndMonth.getMonth() + 1);
 
+  // Helper to get professional name by id
+  function getProfessionalName(id: number | undefined) {
+    if (id === undefined) return "Any professional";
+    const professionals = [
+      { id: 0, name: "Any professional" },
+      { id: 1, name: "Banele" },
+      { id: 2, name: "Dineo" },
+      { id: 3, name: "Michelle" },
+    ];
+    return professionals.find(p => p.id === id)?.name || "Any professional";
+  }
+
   return (
     <div className="flex flex-col w-full h-full gap-4">
       <div className="flex flex-col w-full bg-white rounded-2xl shadow-none p-0" style={{ minHeight: 0, flex: 1 }}>
@@ -193,26 +234,32 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               display: 'flex',
               whiteSpace: 'nowrap',
             }}
-            onClick={() => onOpenProfessionalModal && onOpenProfessionalModal()}
+            onClick={() => {
+              if (professionalMode === 'perService') {
+                setPerServiceModalOpen(true);
+              } else if (onOpenProfessionalModal) {
+                onOpenProfessionalModal();
+              }
+            }}
           >
             {/* Profile icon on the left */}
             <span className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
               <svg width="20" height="20" fill="none" viewBox="0 0 32 32">
-                <circle cx="16" cy="16" r="14" stroke="#d1d5db" strokeWidth="2" fill="none"/>
-                <ellipse cx="16" cy="20" rx="7" ry="5" fill="#d1d5db" />
-                <circle cx="16" cy="13" r="4" fill="#d1d5db" />
+                <circle cx="16" cy="16" r="14" stroke="#232323" strokeWidth="2" fill="none"/>
+                <ellipse cx="16" cy="20" rx="7" ry="5" fill="#232323" />
+                <circle cx="16" cy="13" r="4" fill="#232323" />
               </svg>
             </span>
             {/* Text in the middle */}
             <span className="mx-auto flex items-center" style={{ whiteSpace: 'nowrap' }}>
               {professionalMode === 'perService'
                 ? "Multiple professionals"
-                : "Any professional"}
+                : getProfessionalName(selectedProfessional)}
             </span>
             {/* Down arrow icon on the right */}
             <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
               <svg width="18" height="18" fill="none" viewBox="0 0 20 20">
-                <path d="M5 8l5 5 5-5" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M5 8l5 5 5-5" stroke="#232323" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </span>
           </button>
@@ -409,7 +456,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full" style={{ alignSelf: 'center' }}>
-            <div className="text-lg font-semibold mt-20 text-[#141414]">Fully booked on this date</div>
+            <div className="text-lg font-semibold mt-6 text-[#141414]">Fully booked on this date</div>
             <div className="text-sm text-[#7B8487]">Available from {days.find((d, i) => (availableTimes[d.iso] || []).length > 0 && i > selectedDayIdx)?.label || "another day"}</div>
             <div className="flex gap-2 mt-2">
               <button className="px-4 py-2 rounded-full border font-medium text-[#33383C] hover:bg-gray-100" onClick={() => {
@@ -432,6 +479,14 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
           </button>
           {/* Continue button removed */}
         </div>
+        {/* ProfessionalPerServiceModal for perService mode */}
+        <ProfessionalPerServiceModal
+          open={perServiceModalOpen}
+          onClose={() => setPerServiceModalOpen(false)}
+          bookings={bookings || []}
+          selectedProfessionals={selectedProfessionals || {}}
+          setSelectedProfessionals={setSelectedProfessionals ?? (() => {})}
+        />
       </div>
     </div>
   );

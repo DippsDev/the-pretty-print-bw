@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export interface Professional {
@@ -12,8 +12,8 @@ export interface Professional {
 interface ProfessionalSelectionModalProps {
   open: boolean;
   onClose: () => void;
-  selectedProfessional: number | null;
-  onSelect: (id: number) => void;
+  selectedProfessional?: number;
+  onSelect: (id?: number) => void;
   professionals?: Professional[];
 }
 
@@ -25,6 +25,24 @@ const defaultProfessionals: Professional[] = [
     avatar: null,
     isGroup: true,
   },
+  {
+    id: 1,
+    name: "Banele",
+    role: "Therapist",
+    avatar: "/professionals/banele.jpg",
+  },
+  {
+    id: 2,
+    name: "Dineo",
+    role: "Therapist",
+    avatar: "/professionals/dineo.jpg",
+  },
+  {
+    id: 3,
+    name: "Michelle",
+    role: "Therapist",
+    avatar: "/professionals/michelle.jpg",
+  },
 ];
 
 const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
@@ -35,6 +53,11 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
   professionals = defaultProfessionals,
 }) => {
   if (!open) return null;
+
+  function handleSelect(id: number) {
+    // Always allow changing selection
+    onSelect(id);
+  }
 
   return (
     <div
@@ -54,7 +77,7 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 60 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-8 flex flex-col"
+          className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 flex flex-col"
           style={{
             minHeight: 320,
             zIndex: 1,
@@ -83,8 +106,12 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.25, delay: idx * 0.05 }}
                   className={`border rounded-lg p-4 bg-white flex flex-row items-center gap-4 cursor-pointer hover:bg-gray-50 transition w-full`}
-                  style={{ minWidth: 0 }}
-                  onClick={() => onSelect(pro.id)}
+                  style={{
+                    minWidth: 0,
+                    opacity: 1, // Always allow all options to be clickable
+                    pointerEvents: 'auto'
+                  }}
+                  onClick={() => handleSelect(pro.id)}
                 >
                   {pro.isGroup ? (
                     <span className="w-14 h-14 flex items-center justify-center rounded-full bg-[#f3f3f3]">
@@ -112,10 +139,12 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
                         : 'border-[#d1d5db] text-[#33383C] bg-transparent hover:border-[#33383C]'
                     }`}
                     style={{ background: 'transparent', boxShadow: 'none' }}
-                    onClick={e => { e.stopPropagation(); onSelect(pro.id); }}
+                    onClick={e => {
+                      e.stopPropagation();
+                      handleSelect(pro.id);
+                    }}
                     aria-pressed={selectedProfessional === pro.id}
-                    type="button"
-                    whileTap={{ scale: 0.96 }}
+                    disabled={false} // Always allow all buttons
                   >
                     <AnimatePresence mode="wait" initial={false}>
                       {selectedProfessional === pro.id ? (

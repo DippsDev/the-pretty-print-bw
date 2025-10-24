@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import ProfessionalSelectionModal, { Professional } from "../modals/ProfessionalSelectionModal";
+import ProfessionalSelectionModal, { Professional } from "../modals/ProfessionalSelection";
 import { motion, AnimatePresence } from "framer-motion";
 
 const professionals: Professional[] = [
@@ -10,7 +10,24 @@ const professionals: Professional[] = [
     avatar: null,
     isGroup: true,
   },
-  // Add more professionals here if needed
+  {
+    id: 1,
+    name: "Banele",
+    role: "Therapist",
+    avatar: "/professionals/banele.jpg",
+  },
+  {
+    id: 2,
+    name: "Dineo",
+    role: "Therapist",
+    avatar: "/professionals/dineo.jpg",
+  },
+  {
+    id: 3,
+    name: "Michelle",
+    role: "Therapist",
+    avatar: "/professionals/michelle.jpg",
+  },
 ];
 
 export default function ProfessionalPerServiceStep({
@@ -22,7 +39,7 @@ export default function ProfessionalPerServiceStep({
 }: {
   bookings: { name: string; option: string; time: string; price: string }[];
   selectedProfessionals: { [bookingIdx: number]: number | undefined };
-  setSelectedProfessionals: React.Dispatch<React.SetStateAction<{ [bookingIdx: number]: number | undefined }>>;
+  setSelectedProfessionals: (bookingIdx: number, id: number | undefined) => void;
   onBack: () => void;
   onContinue: () => void;
 }) {
@@ -80,14 +97,11 @@ export default function ProfessionalPerServiceStep({
                   style={{ position: 'fixed', inset: 0, zIndex: 101 }}
                 >
                   <ProfessionalSelectionModal
-                    open={true}
+                    open={modalOpenIdx === i}
                     onClose={() => setModalOpenIdx(null)}
-                    selectedProfessional={selectedProfessionals[i] ?? null}
-                    onSelect={(id: number) => {
-                      setSelectedProfessionals(prev => ({
-                        ...prev,
-                        [i]: id
-                      }));
+                    selectedProfessional={selectedProfessionals[i]}
+                    onSelect={id => {
+                      setSelectedProfessionals(i, id);
                       setModalOpenIdx(null);
                     }}
                     professionals={professionals}

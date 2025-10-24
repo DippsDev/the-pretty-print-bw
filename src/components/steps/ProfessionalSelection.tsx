@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 function ProfessionalSelection({
@@ -9,13 +9,11 @@ function ProfessionalSelection({
   professionalMode,
 }: {
   onBack: () => void;
-  onSelect?: (id: number) => void;
+  onSelect?: (id?: number) => void;
   selectedProfessional?: number;
   onSelectPerService?: () => void;
   professionalMode?: 'single' | 'perService';
 }) {
-
-  // Placeholder professionals
   const professionals = [
     {
       id: 0,
@@ -24,14 +22,37 @@ function ProfessionalSelection({
       avatar: null,
       isGroup: true,
     },
+    {
+      id: 1,
+      name: "Banele",
+      role: "Therapist",
+      avatar: "/professionals/banele.jpg",
+    },
+    {
+      id: 2,
+      name: "Dineo",
+      role: "Therapist",
+      avatar: "/professionals/dineo.jpg",
+    },
+    {
+      id: 3,
+      name: "Michelle",
+      role: "Therapist",
+      avatar: "/professionals/michelle.jpg",
+    },
   ];
 
-  const [selected, setSelected] = useState<number | null>(selectedProfessional ?? null);
+  // No default selection: do not highlight any card unless selectedProfessional is set
+  function handleSelect(id: number) {
+    // Always allow changing selection
+    if (onSelect) onSelect(id);
+  }
 
-  // Update local selected when prop changes
-  React.useEffect(() => {
-    if (selectedProfessional !== undefined) setSelected(selectedProfessional);
-  }, [selectedProfessional]);
+  function handleSelectPerService() {
+    // Deselect any selected professional when switching to per-service mode
+    if (onSelect) onSelect(undefined);
+    if (onSelectPerService) onSelectPerService();
+  }
 
   return (
     <AnimatePresence>
@@ -52,11 +73,12 @@ function ProfessionalSelection({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25, delay: idx * 0.05 }}
               className={`border rounded-lg p-4 bg-white flex flex-row items-center gap-4 cursor-pointer hover:bg-gray-50 transition w-full`}
-              style={{ minWidth: 0 }}
-              onClick={() => {
-                setSelected(pro.id);
-                if (onSelect) onSelect(pro.id);
+              style={{
+                minWidth: 0,
+                opacity: 1, // Always allow all options to be clickable
+                pointerEvents: 'auto'
               }}
+              onClick={() => handleSelect(pro.id)}
             >
               {pro.isGroup ? (
                 <span className="w-14 h-14 flex items-center justify-center rounded-full bg-[#f3f3f3]">
@@ -79,22 +101,20 @@ function ProfessionalSelection({
               </div>
               <motion.button
                 className={`px-4 py-2 rounded-full border-2 font-semibold transition-colors duration-200 flex items-center justify-center min-w-[80px] ${
-                  selected === pro.id
+                  selectedProfessional === pro.id
                     ? 'border-[#33383C] text-[#33383C] bg-[#f7f7f7]'
                     : 'border-[#d1d5db] text-[#33383C] bg-transparent hover:border-[#33383C]'
                 }`}
                 style={{ background: 'transparent', boxShadow: 'none' }}
                 onClick={e => {
                   e.stopPropagation();
-                  setSelected(pro.id);
-                  if (onSelect) onSelect(pro.id);
+                  handleSelect(pro.id);
                 }}
-                aria-pressed={selected === pro.id}
-                type="button"
-                whileTap={{ scale: 0.96 }}
+                aria-pressed={selectedProfessional === pro.id}
+                disabled={false} // Always allow all buttons
               >
                 <AnimatePresence mode="wait" initial={false}>
-                  {selected === pro.id ? (
+                  {selectedProfessional === pro.id ? (
                     <motion.span
                       key="check"
                       initial={{ opacity: 0, scale: 0.7 }}
@@ -129,7 +149,7 @@ function ProfessionalSelection({
           transition={{ duration: 0.25, delay: professionals.length * 0.05 }}
           className="border rounded-lg p-4 bg-white flex flex-row items-center gap-4 cursor-pointer hover:bg-gray-50 transition w-full"
           style={{ minWidth: 0 }}
-          onClick={() => onSelectPerService && onSelectPerService()}
+          onClick={handleSelectPerService}
         >
           <span className="w-14 h-14 flex items-center justify-center rounded-full bg-[#f3f3f3]">
             {/* Group icon */}
