@@ -17,10 +17,17 @@ function getDays(numDays = 30, startDate?: Date) {
       label: d.toLocaleDateString(undefined, { weekday: "short" }),
       day: d.getDate(),
       month: d.toLocaleDateString(undefined, { month: "short" }),
-      iso: d.toISOString().slice(0, 10),
+      iso: toLocalDateString(d),
     });
   }
   return days;
+}
+
+function toLocalDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 const NUM_DAYS = 30;
@@ -69,15 +76,9 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const days = getDays(carouselNumDays, carouselStartDate);
 
   // Find the index of the selected day in the carousel
-  // Use controlled selectedDate if provided
-  const initialDayIdx = selectedDate
-    ? getDays(carouselNumDays, carouselStartDate).findIndex(d =>
-        d.iso === selectedDate.toISOString().slice(0, 10)
-      )
-    : 0;
-  const [selectedDayIdx, setSelectedDayIdx] = useState(initialDayIdx >= 0 ? initialDayIdx : 0);
+  const [selectedDayIdx, setSelectedDayIdx] = useState(0);
   const [visibleMonthYear, setVisibleMonthYear] = useState(() => {
-    const d = days[0].date;
+    const d = days.length > 0 ? days[0].date : new Date();
     return `${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`;
   });
   const tabListRef = useRef<HTMLUListElement>(null);
@@ -93,30 +94,9 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
 
   // Update visibleMonthYear when selectedDayIdx changes
   useEffect(() => {
-    const d = days[selectedDayIdx].date;
+    const safeIdx = Math.max(0, Math.min(selectedDayIdx, days.length - 1));
+    const d = days[safeIdx]?.date ?? new Date();
     setVisibleMonthYear(`${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`);
-  }, [selectedDayIdx, days]);
-
-  // When the parent changes selectedDate, update selectedDayIdx
-  useEffect(() => {
-    if (selectedDate) {
-      const idx = days.findIndex(d => d.iso === selectedDate.toISOString().slice(0, 10));
-      if (idx !== -1 && idx !== selectedDayIdx) setSelectedDayIdx(idx);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, days]);
-
-  // When the day changes, update selectedDate and selectedTime accordingly
-  useEffect(() => {
-    if (setSelectedDate && days[selectedDayIdx] && (!selectedDate || days[selectedDayIdx].iso !== selectedDate.toISOString().slice(0, 10))) {
-      setSelectedDate(days[selectedDayIdx].date);
-    }
-    // If the new date has no available times, clear selectedTime
-    const timesForDay = availableTimes[days[selectedDayIdx].iso] || [];
-    if (selectedTime && !timesForDay.includes(selectedTime)) {
-      if (setSelectedTime) setSelectedTime(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDayIdx, days]);
 
   // Defensive: ensure selectedDayIdx is valid and days is not empty
@@ -173,7 +153,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   // When a date is picked, update selectedDayIdx and close modal
   function handleCalendarSelect(date?: Date) {
     if (!date) return;
-    const iso = date.toISOString().slice(0, 10);
+    const iso = toLocalDateString(date);
 
     // Get current carousel range
     const currentStart = carouselStartDate;
@@ -420,9 +400,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
                 showOutsideDays
                 footer={
                   <div className="pt-2 text-sm text-[#33383C] text-center">
-                    {days[selectedDayIdx].date
-                      ? `Selected: ${days[selectedDayIdx].date.toLocaleDateString()}`
-                      : "Pick a day."}
+                    Selected: ${days[safeSelectedDayIdx].date.toLocaleDateString()}
                   </div>
                 }
               />
@@ -463,12 +441,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
                     style={{ fontFamily: interTight.style.fontFamily, boxShadow: "none", border: "none" }}
                     onClick={() => {
                       setSelectedDayIdx(idx);
-                      if (setSelectedDate) setSelectedDate(days[idx].date);
-                      // Clear selectedTime if not available for new date
-                      const timesForDay = availableTimes[days[idx].iso] || [];
-                      if (!timesForDay.includes(selectedTime || "")) {
-                        if (setSelectedTime) setSelectedTime(null);
-                      }
+                      if (setSelectedTime) setSelectedTime(null);
                     }}
                   >
                     <span className="text-xs mb-1">{d.label}</span>
