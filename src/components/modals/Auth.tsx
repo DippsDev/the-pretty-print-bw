@@ -1,4 +1,4 @@
-import React, { useState, forwardRef } from "react";
+import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createClient } from "../../../utils/supabase/client";
 import Loader from "../Loader";
@@ -139,23 +139,6 @@ export default function AuthModal({
         return 420;
     }
   }
-
-  // Custom input component for PhoneInput to match theme
-  const ThemedPhoneInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-    (props, ref) => (
-      <input
-        ref={ref}
-        {...props}
-        className={
-          "w-full border rounded-lg p-3 text-[#141414] bg-white focus:outline-none focus:ring-1 focus:ring-[#33383C] " +
-          (props.className || "")
-        }
-        style={{ minWidth: 0 }}
-        // Remove this line if present: autoFocus={true}
-        // Fix: do NOT set autoFocus here, let PhoneInput manage focus
-      />
-    )
-  );
 
   return (
     <AnimatePresence>
@@ -405,9 +388,6 @@ export default function AuthModal({
                             onChange={setPhone}
                             disabled={loading}
                             international
-                            inputComponent={ThemedPhoneInput}
-                            // Remove autoFocus from here if present
-                            // Fix: do NOT set autoFocus on PhoneInput or its inputComponent
                             countrySelectProps={{
                               className:
                                 "border rounded-lg p-3 bg-white text-[#141414] focus:outline-none focus:ring-1 focus:ring-[#33383C] mr-2",
@@ -422,6 +402,17 @@ export default function AuthModal({
                             }
                             .PhoneInputInput {
                               flex: 1 1 0%;
+                              border: 1px solid #d1d5db;
+                              border-radius: 0.5rem;
+                              padding: 0.75rem;
+                              background: #fff;
+                              color: #141414;
+                              font-size: 1rem;
+                              height: 48px;
+                            }
+                            .PhoneInputInput:focus {
+                              outline: none;
+                              box-shadow: 0 0 0 1px #33383C;
                             }
                             .PhoneInputCountrySelect {
                               border-radius: 0.5rem;
