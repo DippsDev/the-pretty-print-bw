@@ -4,9 +4,9 @@ import React, { useRef, useState } from "react";
 import { Inter_Tight } from "next/font/google";
 import { useSelector, useDispatch } from "react-redux";
 import type { RootState } from "@/redux/store";
-import { ContactForm } from "./ContactPage";
 import { SERVICES } from "@/lib/servicesData";
-import ServiceModal from "../../components/steps/ServiceSelection";
+import ServiceModal from "../../components/modals/Service";
+import ServiceSelectionStep from "../../components/steps/ServiceSelection";
 import ProfessionalSelectionModal, { Professional } from "../../components/modals/ProfessionalSelection";
 import TimeSelectionModal from "../../components/steps/TimeSelection";
 import ProfessionalSelection from "../../components/steps/ProfessionalSelection";
@@ -16,10 +16,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { setSelectedProfessional, setSelectedProfessionals } from "../../redux/professionalSlice";
 import { addBooking, removeBooking } from "../../redux/serviceSlice";
 import ConfirmStep from "@/components/steps/Confirm";
+import AuthModal from "@/components/modals/Auth";
+import { createClient } from "../../../utils/supabase/client"; // use shared client utility
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
 const SERVICE_CATEGORIES = SERVICES.map(s => s.label);
+
+// Supabase client
+const supabase = createClient();
 
 // Main ServicesPage component
 function ServicesPage() {
@@ -39,6 +44,27 @@ function ServicesPage() {
   const [professionalModalOpen, setProfessionalModalOpen] = useState(false);
   const [perServiceModalOpen, setPerServiceModalOpen] = useState(false);
   const [activeProfessionalIdx, setActiveProfessionalIdx] = useState<number | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Check user session on mount and after login
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) setAuthModalOpen(false);
+    });
+    return () => { listener?.subscription?.unsubscribe(); };
+  }, []);
+
+  // Logout handler
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setProfileDropdownOpen(false);
+    setUser(null);
+  }
 
   // Helper to get service options for modal (simulate options for demo)
   function getServiceModalData(svc: any) {
@@ -127,14 +153,25 @@ function ServicesPage() {
       else setStep('time');
     }
     else if (step === 'professionalPerService') setStep('time');
-    else if (step === 'time') setStep('confirm');
+    else if (step === 'time') {
+      // Only allow going to confirm if user is logged in and date/time are selected
+      if (!user) {
+        setAuthModalOpen(true);
+        return;
+      }
+      if (!selectedDate || !selectedTime) {
+        // Optionally show a warning here
+        return;
+      }
+      setStep('confirm');
+    }
   }
 
   // Handler for time selection (update date/time immediately)
   function handleTimeSelection({ date, time }: { date: string; time: string }) {
     setSelectedDate(new Date(date));
     setSelectedTime(time);
-    // Optionally: setStep('confirm') or similar if you want to advance
+    // Do NOT open auth modal here anymore
   }
 
   // Helper to get professional name by id
@@ -149,8 +186,66 @@ function ServicesPage() {
     return professionals.find(p => p.id === id)?.name || "Any professional";
   }
 
+  // Handler for professional dropdown in TimeSelection
+  function handleOpenProfessionalModal(idx?: number) {
+    // If more than 1 booking, always open per-service modal
+    if (bookings.length > 1) {
+      setPerServiceModalOpen(true);
+      setActiveProfessionalIdx(null);
+    } else if (professionalMode === "perService" && typeof idx === "number") {
+      setActiveProfessionalIdx(idx);
+      setPerServiceModalOpen(true);
+    } else {
+      setActiveProfessionalIdx(null);
+      setProfessionalModalOpen(true);
+    }
+  }
+
   return (
     <div className={`relative w-full min-h-[100dvh] bg-white ${interTight.className}`} style={{overflowY: 'auto', maxHeight: '100dvh'}}>
+      {/* Profile icon top right */}
+      {user && (
+        <div className="fixed top-6 right-8 z-[201]">
+          <button
+            ref={profileBtnRef}
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-[#f5f5f5] hover:bg-[#e5e5e5] border border-[#ededed] shadow-sm transition"
+            onClick={() => setProfileDropdownOpen(v => !v)}
+            aria-haspopup="menu"
+            aria-expanded={profileDropdownOpen}
+            aria-label="User menu"
+            type="button"
+          >
+            {/* Simple user icon */}
+            <svg width="28" height="28" fill="none" viewBox="0 0 32 32">
+              <circle cx="16" cy="12" r="6" fill="#33383C"/>
+              <rect x="7" y="22" width="18" height="6" rx="3" fill="#33383C"/>
+            </svg>
+          </button>
+          {/* Dropdown */}
+          {profileDropdownOpen && (
+            <div
+              className="absolute right-0 mt-2 w-48 bg-white border border-[#ededed] rounded-xl shadow-lg z-[202] py-2"
+              style={{ minWidth: 180 }}
+              tabIndex={-1}
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setProfileDropdownOpen(false);
+              }}
+            >
+              <div className="px-4 py-2 text-sm font-semibold text-[#232323] border-b border-[#ededed]">
+                {user.user_metadata?.full_name || user.email}
+              </div>
+              <button
+                className="w-full text-left px-4 py-2 text-[#d32f2f] hover:bg-[#f9eaea] rounded-b-xl text-sm font-medium transition"
+                onClick={handleLogout}
+                type="button"
+                role="menuitem"
+              >
+                Log out
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex flex-row w-full min-h-[100dvh]">
         {/* Main content (left side + center) */}
         <div className="flex-1 flex flex-col px-8 py-8">
@@ -269,42 +364,13 @@ function ServicesPage() {
                 {/* Services under selected category */}
                 <div>
                   <h2 className="text-2xl font-bold mb-4 text-[#141414]">{SERVICE_CATEGORIES[activeCategory]}</h2>
-                  <div className="flex flex-col gap-4">
-                    {(SERVICES[activeCategory]?.services || []).map((svc, i) => (
-                      <div
-                        key={svc.name}
-                        className={`border rounded-lg p-4 bg-white flex flex-col gap-1 cursor-pointer hover:bg-gray-50 transition`}
-                        onClick={() => {
-                          setModalService(getServiceModalData(svc));
-                          setModalOpen(true);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-semibold text-lg text-[#141414]">{svc.name}</div>
-                          </div>
-                        </div>
-                        {svc.description && (
-                          <div className="text-sm text-[#7B8487] mt-1">{svc.description}</div>
-                        )}
-                        <div className="text-sm text-[#232323] font-semibold mt-1">
-                          {svc.price && typeof svc.price === "object"
-                            ? `from ${Object.values(svc.price)[0]}`
-                            : svc.price}
-                        </div>
-                        {svc.price && typeof svc.price === "object" && (
-                          <div className="text-xs text-[#7B8487] mt-1">
-                            {Object.entries(svc.price)
-                              .map(([time, price]) => `${time}: ${price}`)
-                              .join(" | ")}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {(SERVICES[activeCategory]?.services || []).length === 0 && (
-                      <div className="text-[#b0b0b0] italic">No services in this category yet.</div>
-                    )}
-                  </div>
+                  <ServiceSelectionStep
+                    services={SERVICES[activeCategory]?.services || []}
+                    onSelectService={svc => {
+                      setModalService(getServiceModalData(svc));
+                      setModalOpen(true);
+                    }}
+                  />
                 </div>
               </motion.div>
             )}
@@ -330,6 +396,7 @@ function ServicesPage() {
                     setStep('professionalPerService');
                   }}
                   professionalMode={professionalMode}
+                  bookings={bookings} // <-- pass bookings here
                 />
               </motion.div>
             )}
@@ -372,12 +439,17 @@ function ServicesPage() {
                       [new Date().toISOString().slice(0,10)]: ["09:00", "10:00", "11:00", "14:00"],
                       [(() => { const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })()]: ["10:00", "13:00", "15:00"]
                     }}
-                    onOpenProfessionalModal={() => setProfessionalModalOpen(true)}
+                    onOpenProfessionalModal={() => handleOpenProfessionalModal()}
                     professionalMode={professionalMode}
                     bookings={bookings}
                     selectedProfessionals={selectedProfessionals}
                     setSelectedProfessionals={(bookingIdx: number, id: number | undefined) => dispatch(setSelectedProfessionals({ bookingIdx, id }))}
                     selectedProfessional={selectedProfessional}
+                    user={user}
+                    selectedDate={selectedDate}
+                    selectedTime={selectedTime}
+                    setSelectedDate={setSelectedDate}
+                    setSelectedTime={setSelectedTime}
                   />
                 </div>
               </motion.div>
@@ -407,7 +479,7 @@ function ServicesPage() {
         </div>
         {/* Right: Summary box as card, fixed position, side by side */}
         <div className="hidden md:flex md:flex-col items-center py-8 px-6" style={{width: 380, minWidth: 380, maxWidth: 380, height: '100dvh', position: 'sticky', top: 0, right: 0, zIndex: 10}}>
-          <div className="w-full max-w-xs mx-auto bg-white rounded-2xl border p-6 mt-8 flex flex-col gap-6" style={{maxHeight: 'calc(100vh - 48px)', minHeight: 0, display: 'flex'}}>
+          <div className="w-full max-w-xs mx-auto bg-white rounded-2xl border p-6 mt-16 flex flex-col gap-6" style={{maxHeight: 'calc(100vh - 48px)', minHeight: 0, display: 'flex'}}>
             {/* Title */}
             <div className="flex flex-col gap-1">
               <span className="text-lg font-bold text-[#141414] tracking-tight truncate">Booking Summary</span>
@@ -498,100 +570,88 @@ function ServicesPage() {
       {/* Service Modal with AnimatePresence for smooth transitions */}
       <AnimatePresence>
         {modalOpen && (
-          <motion.div
-            key="service-modal"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.25 }}
-            style={{ position: 'fixed', inset: 0, zIndex: 100 }}
-          >
-            <ServiceModal
-              open={modalOpen}
-              onClose={() => setModalOpen(false)}
-              service={modalService}
-              onAddBooking={handleAddBooking}
-            />
-          </motion.div>
+          <ServiceModal
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            service={modalService}
+            onAddBooking={handleAddBooking}
+          />
         )}
       </AnimatePresence>
-      {/* Professional modal for per-booking selection */}
       <AnimatePresence>
         {professionalModalOpen && (
-          <motion.div
-            key="professional-modal"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.25 }}
-            style={{ position: 'fixed', inset: 0, zIndex: 101 }}
-          >
-            <ProfessionalSelectionModal
-              open={professionalModalOpen}
-              onClose={() => setProfessionalModalOpen(false)}
-              selectedProfessional={
-                activeProfessionalIdx !== null && selectedProfessionals[activeProfessionalIdx] !== undefined
-                  ? selectedProfessionals[activeProfessionalIdx]
-                  : selectedProfessional
+          <ProfessionalSelectionModal
+            open={professionalModalOpen}
+            onClose={() => setProfessionalModalOpen(false)}
+            selectedProfessional={
+              activeProfessionalIdx !== null && selectedProfessionals[activeProfessionalIdx] !== undefined
+                ? selectedProfessionals[activeProfessionalIdx]
+                : selectedProfessional
+            }
+            onSelect={id => {
+              if (activeProfessionalIdx !== null) {
+                dispatch(setSelectedProfessionals({ bookingIdx: activeProfessionalIdx, id }));
+              } else {
+                dispatch(setSelectedProfessional(id));
               }
-              onSelect={id => {
-                if (activeProfessionalIdx !== null) {
-                  dispatch(setSelectedProfessionals({ bookingIdx: activeProfessionalIdx, id }));
-                } else {
-                  dispatch(setSelectedProfessional(id));
-                }
-                setProfessionalModalOpen(false);
-              }}
-              professionals={[
-                {
-                  id: 0,
-                  name: "Any professional",
-                  role: "for maximum availability",
-                  avatar: null,
-                  isGroup: true,
-                },
-                {
-                  id: 1,
-                  name: "Banele",
-                  role: "Therapist",
-                  avatar: "/professionals/banele.jpg",
-                },
-                {
-                  id: 2,
-                  name: "Dineo",
-                  role: "Therapist",
-                  avatar: "/professionals/dineo.jpg",
-                },
-                {
-                  id: 3,
-                  name: "Michelle",
-                  role: "Therapist",
-                  avatar: "/professionals/michelle.jpg",
-                },
-              ]}
-            />
-          </motion.div>
+              setProfessionalModalOpen(false);
+              setActiveProfessionalIdx(null);
+            }}
+            professionals={[
+              {
+                id: 0,
+                name: "Any professional",
+                role: "for maximum availability",
+                avatar: null,
+                isGroup: true,
+              },
+              {
+                id: 1,
+                name: "Banele",
+                role: "Therapist",
+                avatar: "/professionals/banele.jpg",
+              },
+              {
+                id: 2,
+                name: "Dineo",
+                role: "Therapist",
+                avatar: "/professionals/dineo.jpg",
+              },
+              {
+                id: 3,
+                name: "Michelle",
+                role: "Therapist",
+                avatar: "/professionals/michelle.jpg",
+              },
+            ]}
+          />
         )}
       </AnimatePresence>
-      {/* ProfessionalPerServiceModal for perService mode */}
       <AnimatePresence>
         {perServiceModalOpen && (
-          <motion.div
-            key="per-service-modal"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.25 }}
-            style={{ position: 'fixed', inset: 0, zIndex: 102 }}
-          >
-            <ProfessionalPerServiceModal
-              open={perServiceModalOpen}
-              onClose={() => setPerServiceModalOpen(false)}
-              bookings={bookings}
-              selectedProfessionals={selectedProfessionals}
-              setSelectedProfessionals={(bookingIdx: number, id: number | undefined) => dispatch(setSelectedProfessionals({ bookingIdx, id }))}
-            />
-          </motion.div>
+          <ProfessionalPerServiceModal
+            open={perServiceModalOpen}
+            onClose={() => {
+              setPerServiceModalOpen(false);
+              setActiveProfessionalIdx(null);
+            }}
+            bookings={bookings}
+            selectedProfessionals={selectedProfessionals}
+            setSelectedProfessionals={(bookingIdx: number, id: number | undefined) => dispatch(setSelectedProfessionals({ bookingIdx, id }))
+            }
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {authModalOpen && (
+          <AuthModal
+            open={authModalOpen}
+            onClose={() => setAuthModalOpen(false)}
+            onSignupSuccess={user => {
+              setUser(user);
+              setAuthModalOpen(false);
+            }}
+          />
         )}
       </AnimatePresence>
     </div>

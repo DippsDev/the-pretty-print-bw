@@ -55,27 +55,29 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
   if (!open) return null;
 
   function handleSelect(id: number) {
-    // Always allow changing selection
     onSelect(id);
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
-      style={{ minHeight: "100dvh" }}
-      onClick={onClose}
-    >
-      {/* Blurred, darkened background - always rendered */}
-      <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-        style={{ zIndex: 0, pointerEvents: 'auto' }}
-      />
-      {/* Modal content with slide up animation */}
-      <AnimatePresence>
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[201] flex items-center justify-center" style={{ minHeight: "100dvh" }}>
+        {/* Overlay with only fade/blur, no scale */}
         <motion.div
-          initial={{ opacity: 0, y: 60 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 60 }}
+          key="professional-modal-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.22, ease: "linear" }}
+          className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+          style={{ zIndex: 0 }}
+          onClick={onClose}
+          aria-hidden="true"
+        />
+        <motion.div
+          key="professional-modal-content"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
           className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 flex flex-col"
           style={{
@@ -176,8 +178,8 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
             </AnimatePresence>
           </div>
         </motion.div>
-      </AnimatePresence>
-    </div>
+      </div>
+    </AnimatePresence>
   );
 };
 

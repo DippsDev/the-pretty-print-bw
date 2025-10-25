@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import ProfessionalSelectionModal, { Professional } from "../modals/ProfessionalSelection";
-import { motion, AnimatePresence } from "framer-motion";
 
 const professionals: Professional[] = [
   {
@@ -87,28 +86,16 @@ export default function ProfessionalPerServiceStep({
                 </span>
               </button>
             </div>
-            <AnimatePresence>
-              {modalOpenIdx === i && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{ duration: 0.25 }}
-                  style={{ position: 'fixed', inset: 0, zIndex: 101 }}
-                >
-                  <ProfessionalSelectionModal
-                    open={modalOpenIdx === i}
-                    onClose={() => setModalOpenIdx(null)}
-                    selectedProfessional={selectedProfessionals[i]}
-                    onSelect={id => {
-                      setSelectedProfessionals(i, id);
-                      setModalOpenIdx(null);
-                    }}
-                    professionals={professionals}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <ProfessionalSelectionModal
+              open={modalOpenIdx === i}
+              onClose={() => setModalOpenIdx(null)}
+              selectedProfessional={selectedProfessionals[i]}
+              onSelect={id => {
+                setSelectedProfessionals(i, id);
+                setModalOpenIdx(null);
+              }}
+              professionals={professionals}
+            />
           </div>
         ))}
       </div>

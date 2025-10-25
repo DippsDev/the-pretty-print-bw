@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { Inter_Tight } from "next/font/google";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
-import ProfessionalPerServiceModal from "../modals/ProfessionalPerService";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
@@ -37,7 +36,13 @@ interface TimeSelectionModalProps {
   bookings?: any[];
   selectedProfessionals?: { [bookingIdx: number]: number | undefined };
   setSelectedProfessionals?: (bookingIdx: number, id: number | undefined) => void;
-  selectedProfessional?: number; // Add selectedProfessional prop
+  selectedProfessional?: number;
+  // New props for user and controlled date/time
+  user?: any;
+  selectedDate?: Date | null;
+  selectedTime?: string | null;
+  setSelectedDate?: (d: Date | null) => void;
+  setSelectedTime?: (t: string | null) => void;
 }
 
 const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
@@ -50,6 +55,11 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   selectedProfessionals,
   setSelectedProfessionals,
   selectedProfessional,
+  user,
+  selectedDate,
+  selectedTime,
+  setSelectedDate,
+  setSelectedTime,
 }) => {
   // Track the start date and number of days for the carousel range
   const [carouselStartDate, setCarouselStartDate] = useState<Date>(CALENDAR_START);
@@ -59,8 +69,13 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const days = getDays(carouselNumDays, carouselStartDate);
 
   // Find the index of the selected day in the carousel
-  const [selectedDayIdx, setSelectedDayIdx] = useState(0);
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // Use controlled selectedDate if provided
+  const initialDayIdx = selectedDate
+    ? getDays(carouselNumDays, carouselStartDate).findIndex(d =>
+        d.iso === selectedDate.toISOString().slice(0, 10)
+      )
+    : 0;
+  const [selectedDayIdx, setSelectedDayIdx] = useState(initialDayIdx >= 0 ? initialDayIdx : 0);
   const [visibleMonthYear, setVisibleMonthYear] = useState(() => {
     const d = days[0].date;
     return `${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`;
@@ -71,18 +86,37 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const calendarIconRef = useRef<HTMLButtonElement>(null);
 
-  // Modal state for per-service modal
-  const [perServiceModalOpen, setPerServiceModalOpen] = useState(false);
-
   useEffect(() => {
     setSelectedDayIdx(0);
-    setSelectedTime(null);
+    if (setSelectedTime) setSelectedTime(null);
   }, [carouselStartDate, carouselNumDays]);
 
   // Update visibleMonthYear when selectedDayIdx changes
   useEffect(() => {
     const d = days[selectedDayIdx].date;
     setVisibleMonthYear(`${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`);
+  }, [selectedDayIdx, days]);
+
+  // When the parent changes selectedDate, update selectedDayIdx
+  useEffect(() => {
+    if (selectedDate) {
+      const idx = days.findIndex(d => d.iso === selectedDate.toISOString().slice(0, 10));
+      if (idx !== -1 && idx !== selectedDayIdx) setSelectedDayIdx(idx);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, days]);
+
+  // When the day changes, update selectedDate and selectedTime accordingly
+  useEffect(() => {
+    if (setSelectedDate && days[selectedDayIdx] && (!selectedDate || days[selectedDayIdx].iso !== selectedDate.toISOString().slice(0, 10))) {
+      setSelectedDate(days[selectedDayIdx].date);
+    }
+    // If the new date has no available times, clear selectedTime
+    const timesForDay = availableTimes[days[selectedDayIdx].iso] || [];
+    if (selectedTime && !timesForDay.includes(selectedTime)) {
+      if (setSelectedTime) setSelectedTime(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDayIdx, days]);
 
   // Defensive: ensure selectedDayIdx is valid and days is not empty
@@ -235,11 +269,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               whiteSpace: 'nowrap',
             }}
             onClick={() => {
-              if (professionalMode === 'perService') {
-                setPerServiceModalOpen(true);
-              } else if (onOpenProfessionalModal) {
-                onOpenProfessionalModal();
-              }
+              if (onOpenProfessionalModal) onOpenProfessionalModal();
             }}
           >
             {/* Profile icon on the left */}
@@ -431,7 +461,15 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
                   <button
                     className={`flex flex-col items-center px-3 py-2 rounded-lg font-semibold transition-colors min-w-[56px] ${selectedDayIdx === idx ? "bg-[#141414] text-white" : "bg-transparent text-[#141414] hover:bg-[#ededed]"}`}
                     style={{ fontFamily: interTight.style.fontFamily, boxShadow: "none", border: "none" }}
-                    onClick={() => { setSelectedDayIdx(idx); setSelectedTime(null); }}
+                    onClick={() => {
+                      setSelectedDayIdx(idx);
+                      if (setSelectedDate) setSelectedDate(days[idx].date);
+                      // Clear selectedTime if not available for new date
+                      const timesForDay = availableTimes[days[idx].iso] || [];
+                      if (!timesForDay.includes(selectedTime || "")) {
+                        if (setSelectedTime) setSelectedTime(null);
+                      }
+                    }}
                   >
                     <span className="text-xs mb-1">{d.label}</span>
                     <span className="text-lg font-bold">{d.day}</span>
@@ -448,7 +486,9 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               <button
                 key={t}
                 className={`px-4 py-2 rounded-full border font-medium transition-colors ${selectedTime === t ? "bg-[#141414] text-white border-[#141414]" : "bg-white text-[#141414] border-[#d1d5db] hover:border-[#33383C]"}`}
-                onClick={() => setSelectedTime(t)}
+                onClick={() => {
+                  if (setSelectedTime) setSelectedTime(t);
+                }}
               >
                 {t}
               </button>
@@ -479,14 +519,6 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
           </button>
           {/* Continue button removed */}
         </div>
-        {/* ProfessionalPerServiceModal for perService mode */}
-        <ProfessionalPerServiceModal
-          open={perServiceModalOpen}
-          onClose={() => setPerServiceModalOpen(false)}
-          bookings={bookings || []}
-          selectedProfessionals={selectedProfessionals || {}}
-          setSelectedProfessionals={setSelectedProfessionals ?? (() => {})}
-        />
       </div>
     </div>
   );
