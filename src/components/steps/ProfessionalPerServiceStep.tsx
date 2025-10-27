@@ -51,7 +51,12 @@ export default function ProfessionalPerServiceStep({
         {bookings.map((b, i) => (
           <div key={i} className="border rounded-lg p-4 bg-white flex flex-row items-center gap-4">
             <div className="flex flex-col min-w-0 flex-1">
-              <span className="font-semibold text-lg text-[#141414] truncate">{b.option}</span>
+              <span className="font-semibold text-lg text-[#141414] truncate">
+                {/* Show "name - option" if name contains option, else just option */}
+                {b.name && b.option && !b.name.includes(b.option)
+                  ? `${b.name} - ${b.option}`
+                  : b.name}
+              </span>
               <span className="text-xs text-[#232323]/70">{b.time}</span>
             </div>
             <div className="flex flex-col items-end gap-2">
@@ -63,7 +68,9 @@ export default function ProfessionalPerServiceStep({
                   border: "1px solid #d1d5db", // Force border color
                 }}
                 type="button"
-                onClick={() => setModalOpenIdx(i)}
+                onClick={() => {
+                  setModalOpenIdx(i);
+                }}
               >
                 {/* Group icon on the left, no outline, no round bg */}
                 <span className="flex items-center mr-2">
@@ -91,7 +98,12 @@ export default function ProfessionalPerServiceStep({
               onClose={() => setModalOpenIdx(null)}
               selectedProfessional={selectedProfessionals[i]}
               onSelect={id => {
-                setSelectedProfessionals(i, id);
+                // Toggle selection: deselect if already selected
+                if (selectedProfessionals[i] === id) {
+                  setSelectedProfessionals(i, undefined);
+                } else {
+                  setSelectedProfessionals(i, id);
+                }
                 setModalOpenIdx(null);
               }}
               professionals={professionals}

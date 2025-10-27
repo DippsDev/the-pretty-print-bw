@@ -46,8 +46,14 @@ function ProfessionalSelection({
 
   // No default selection: do not highlight any card unless selectedProfessional is set
   function handleSelect(id: number) {
-    // Always allow changing selection
-    if (onSelect) onSelect(id);
+    // Toggle selection: deselect if already selected
+    if (onSelect) {
+      if (selectedProfessional === id) {
+        onSelect(undefined);
+      } else {
+        onSelect(id);
+      }
+    }
   }
 
   function handleSelectPerService() {

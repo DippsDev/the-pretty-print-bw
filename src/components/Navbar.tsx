@@ -102,7 +102,7 @@ const Navbar = () => {
   );
 
   // Remove "Home" from menuItems
-  const menuItems = ['About', 'Services', 'Promotions'];
+  const menuItems = ['Services'];
 
   // Handler for clicking outside nav
   React.useEffect(() => {
@@ -157,7 +157,7 @@ const Navbar = () => {
       dispatch(
         setServiceSelection({
           service: SERVICES[selectedService].label,
-          pkg: SERVICES[selectedService].right[selectedPackage],
+          pkg: SERVICES[selectedService].services[selectedPackage],
         } as any)
       );
       dispatch(setCurrentPage("services"));
@@ -284,8 +284,22 @@ const Navbar = () => {
                       <button
                         key={s.label}
                         onClick={() => {
-                          setSelectedService(idx);
-                          setSelectedPackage(null);
+                          // If this is a package group (has prices), go directly to services page
+                          if (s.prices) {
+                            dispatch(
+                              setServiceSelection({
+                                service: s.label,
+                                pkg: undefined,
+                                time: undefined,
+                              } as any)
+                            );
+                            dispatch(setCurrentPage("services"));
+                            dispatch(setNavbarOpen(false));
+                            setServicesOpen(false);
+                          } else {
+                            setSelectedService(idx);
+                            setSelectedPackage(null);
+                          }
                         }}
                         className={`flex justify-between items-center w-full text-sm font-medium py-1 px-2 rounded
                           transition-colors duration-150
@@ -296,35 +310,28 @@ const Navbar = () => {
                       </button>
                     ))}
                   </div>
-                  {/* Second column: Package */}
-                  <div className="flex flex-col min-w-[180px] max-w-[180px] flex-shrink-0">
-                    {selectedService !== null
-                      ? SERVICES[selectedService].right.map((item, i) => (
-                          <button
-                            key={item}
-                            onClick={() => {
-                              setSelectedPackage(i);
-                            }}
-                            className={`flex justify-start items-center w-full text-sm font-normal py-1 px-2 rounded
-                              transition-colors duration-150
-                              ${selectedPackage === i ? "text-[#33383C]" : "text-[#33383C]/50"} ${interTight.className}`}
-                          >
-                            <span className="text-left w-full">{item}</span>
-                          </button>
-                        ))
-                      : SERVICES[0].right.map((item, i) => (
-                          <button
-                            key={item}
-                            onClick={() => {
-                              setSelectedService(0);
-                              setSelectedPackage(i);
-                            }}
-                            className={`flex justify-start items-center w-full text-sm font-normal py-1 px-2 rounded text-[#33383C]/50 ${interTight.className} transition-colors duration-150`}
-                          >
-                            <span className="text-left w-full">{item}</span>
-                          </button>
-                        ))}
-                  </div>
+                  {/* Second column: Packages */}
+                  {selectedService !== null && !SERVICES[selectedService].prices && (
+                    <div className="flex flex-col min-w-[180px] max-w-[180px] flex-shrink-0">
+                      {SERVICES[selectedService].services.map((item: any, i: number) => (
+                        <button
+                          key={item.name}
+                          onClick={() => {
+                            setSelectedPackage(i);
+                          }}
+                          className={`flex flex-col items-start w-full text-sm font-normal py-1 px-2 rounded
+                            transition-colors duration-150
+                            ${selectedPackage === i ? "text-[#33383C]" : "text-[#33383C]/50"} ${interTight.className}`}
+                        >
+                          <span className="text-left w-full font-medium">{item.name}</span>
+                          {item.description && (
+                            <span className="text-xs text-[#7B8487]">{item.description}</span>
+                          )}
+                          {/* Price removed from nav */}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {/* Removed third column: Time */}
                 </div>
               </div>

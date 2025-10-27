@@ -36,6 +36,7 @@ function ServicesPage() {
   const selectedProfessional = useSelector((state: RootState) => state.professional.selectedProfessional);
   const selectedProfessionals = useSelector((state: RootState) => state.professional.selectedProfessionals);
   const bookings = useSelector((state: RootState) => state.service.bookings);
+  const paymentMethod = useSelector((state: RootState) => state.paymentMethod.selected);
 
   const [step, setStep] = useState<'services' | 'professionals' | 'professionalPerService' | 'time' | 'confirm'>('services');
   const [professionalMode, setProfessionalMode] = useState<'single' | 'perService'>('single');
@@ -68,6 +69,37 @@ function ServicesPage() {
 
   // Helper to get service options for modal (simulate options for demo)
   function getServiceModalData(svc: any) {
+    // If it's a package group (has label and services), show as a package modal
+    if (svc.label && Array.isArray(svc.services) && (svc.prices || svc.price)) {
+      // Use group-level prices for package, always as array of {label, value}
+      const priceOptions =
+        Array.isArray(svc.prices)
+          ? svc.prices.map((p: any) =>
+              typeof p === "string"
+                ? { label: "For 1", value: p }
+                : p
+            )
+          : svc.price
+            ? [{ label: "For 1", value: svc.price }]
+            : [];
+      return {
+        name: svc.label,
+        description: "",
+        options: [
+          {
+            name: svc.label,
+            price: priceOptions,
+            packages: svc.services.map((s: any) => ({
+              name: s.name,
+              description: s.description,
+              price: s.price || "Included",
+            })),
+          },
+        ],
+        basePrice: priceOptions[0]?.value,
+        timeOptions: [],
+      };
+    }
     // Example: for "Eyebrows shape and tint" service, show multiple options (if you want to add custom logic for special services, do it here)
     if (svc.name === "Eyebrows shape and tint") {
       return {
@@ -130,8 +162,23 @@ function ServicesPage() {
 
   // Calculate total price
   function parsePrice(price: string) {
-    const match = price.match(/(\d+(\.\d+)?)/);
-    return match ? parseFloat(match[1]) : 0;
+    // Remove currency, spaces, and thousands separators, handle both comma and dot decimals
+    // E.g. "R1 399" -> 1399, "R2 499.50" -> 2499.50, "R1,399.50" -> 1399.50
+    if (!price) return 0;
+    // Remove everything except digits, comma, dot
+    let cleaned = price.replace(/[^\d.,]/g, '').replace(/\s/g, '');
+    // If both comma and dot exist, assume comma is thousands separator, remove it
+    if (cleaned.includes(',') && cleaned.includes('.')) {
+      cleaned = cleaned.replace(/,/g, '');
+    } else if ((cleaned.match(/,/g) || []).length === 1 && !cleaned.includes('.')) {
+      // If only one comma and no dot, treat comma as decimal
+      cleaned = cleaned.replace(',', '.');
+    } else {
+      // Remove all commas (thousands sep)
+      cleaned = cleaned.replace(/,/g, '');
+    }
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
   }
   const total = bookings.reduce((sum, b) => sum + parsePrice(b.price), 0);
 
@@ -145,26 +192,64 @@ function ServicesPage() {
   }
 
   // Right side continue button logic
-  function handleContinue() {
+  async function handleContinue() {
     if (bookings.length === 0) return;
+    // Only block continue if user is not logged in at confirm step
+    if (step === 'time') {
+      if (!user) {
+        setAuthModalOpen(true);
+        return;
+      }
+      // Only allow continue if date and time are selected
+      if (!selectedDate || !selectedTime) {
+        return;
+      }
+      setStep('confirm');
+      return;
+    }
+    if (step === 'confirm') {
+      // Yoco payment logic here
+      if (paymentMethod === "card") {
+        // Get user email from supabase
+        const { data } = await supabase.auth.getUser();
+        const userObj = data?.user;
+        const email = userObj?.email || userObj?.user_metadata?.email;
+        // Prepare booking summary for Yoco
+        const bookingSummary = bookings.map(b => ({
+          name: b.name && b.option && !b.name.includes(b.option) ? `${b.name} - ${b.option}` : b.name,
+          option: b.option,
+          time: b.time,
+          price: b.price,
+        }));
+        // Call your backend to create a Yoco checkout session
+        const res = await fetch("/api/yoco/create-checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            total,
+            bookings: bookingSummary,
+            date: selectedDate ? selectedDate.toISOString() : null,
+            time: selectedTime,
+          }),
+        });
+        const result = await res.json();
+        if (result.url) {
+          window.location.assign(result.url);
+        } else {
+          alert("Failed to initiate payment. Please try again.");
+        }
+        return;
+      }
+      // If not card, you can handle venue payment here if needed
+      return;
+    }
     if (step === 'services') setStep('professionals');
     else if (step === 'professionals') {
       if (professionalMode === 'perService') setStep('professionalPerService');
       else setStep('time');
     }
     else if (step === 'professionalPerService') setStep('time');
-    else if (step === 'time') {
-      // Only allow going to confirm if user is logged in and date/time are selected
-      if (!user) {
-        setAuthModalOpen(true);
-        return;
-      }
-      if (!selectedDate || !selectedTime) {
-        // Optionally show a warning here
-        return;
-      }
-      setStep('confirm');
-    }
   }
 
   // Handler for time selection (update date/time immediately)
@@ -365,7 +450,7 @@ function ServicesPage() {
                 <div>
                   <h2 className="text-2xl font-bold mb-4 text-[#141414]">{SERVICE_CATEGORIES[activeCategory]}</h2>
                   <ServiceSelectionStep
-                    services={SERVICES[activeCategory]?.services || []}
+                    services={[SERVICES[activeCategory]]}
                     onSelectService={svc => {
                       setModalService(getServiceModalData(svc));
                       setModalOpen(true);
@@ -521,7 +606,7 @@ function ServicesPage() {
                     {bookings.map((b, i) => (
                       <li key={i} className="flex flex-row items-center gap-2 bg-[#fafbfc] rounded-lg px-3 py-2">
                         <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
-                          <span className="text-[#141414] font-medium text-sm truncate max-w-[140px]" title={b.option}>{b.option}</span>
+                          <span className="text-[#141414] font-medium text-sm truncate max-w-[140px]" title={b.option}>{b.name}</span>
                           <span className="text-xs text-[#232323]/70">{b.time}</span>
                           {/* Professional name below time, always up to date */}
                           <span className="text-xs text-[#33383C] mt-1">
@@ -557,12 +642,26 @@ function ServicesPage() {
               </span>
             </div>
             <button
-              className={`py-2 px-8 rounded-full font-semibold text-base mt-2 ${bookings.length > 0 ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]" : "bg-gray-300 text-gray-600 cursor-not-allowed"}`}
+              className={`py-2 px-8 rounded-full font-semibold text-base mt-2 ${
+                bookings.length > 0 &&
+                (
+                  (step !== 'time' && step !== 'confirm') ||
+                  (step === 'time' && selectedDate && selectedTime) ||
+                  (step === 'confirm')
+                )
+                  ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]"
+                  : "bg-gray-300 text-gray-600 cursor-not-allowed"
+              }`}
               style={{ width: 'auto', alignSelf: 'flex-end' }}
-              disabled={bookings.length === 0}
+              disabled={
+                bookings.length === 0 ||
+                (step === 'time' && (!selectedDate || !selectedTime))
+              }
               onClick={handleContinue}
             >
-              Continue
+              {step === 'confirm' && paymentMethod === "card"
+                ? "Confirm & Pay"
+                : "Continue"}
             </button>
           </div>
         </div>
