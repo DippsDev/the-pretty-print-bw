@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { Inter_Tight } from "next/font/google";
 import { useSelector, useDispatch } from "react-redux";
 import type { RootState } from "@/redux/store";
@@ -29,6 +29,26 @@ const supabase = createClient();
 // Main ServicesPage component
 function ServicesPage() {
   const [activeCategory, setActiveCategory] = useState(0);
+  // Listen for currentSection from Redux
+  const currentSection = useSelector((state: RootState) => state.navigation.currentSection);
+  // When currentSection changes, update activeCategory to match the group/tab
+  useEffect(() => {
+    if (currentSection) {
+      const idx = SERVICE_CATEGORIES.findIndex(
+        (cat) => cat.toLowerCase() === currentSection.toLowerCase()
+      );
+      if (idx !== -1 && idx !== activeCategory) {
+        setActiveCategory(idx);
+        // Optionally scroll to the selected tab
+        if (tabListRef.current) {
+          const tab = tabListRef.current.children[idx] as HTMLElement;
+          if (tab) {
+            tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+          }
+        }
+      }
+    }
+  }, [currentSection]);
   const tabListRef = useRef<HTMLUListElement>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalService, setModalService] = useState<any>(null);

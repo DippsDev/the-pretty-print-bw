@@ -6,6 +6,9 @@ import { Providers } from "@/redux/provider";
 import Navbar from "@/components/Navbar";
 import BackgroundImage from "@/components/BackgroundImage";
 import MainContentOverlay from "@/components/MainContentOverlay";
+import Chatbot from "@/components/chat/Chatbot";
+
+// Chatbot is a Client Component; importing directly is supported from a Server Component
 
 // Import your local font(s)
 const fsBrabo = localFont({
@@ -49,6 +52,8 @@ export default function RootLayout({
           <main className="bg-white h-[100dvh] w-[100dvw]">
             <MainContentOverlay>{children}</MainContentOverlay>
           </main>
+          {/* Global Chatbot mounted at root so it appears on all pages */}
+          <Chatbot />
         </Providers>
       </body>
     </html>

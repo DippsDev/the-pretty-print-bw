@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createClient } from "../../../utils/supabase/client";
-import Loader from "../Loader";
+import Loader from "../chat/Loader";
 import 'react-phone-number-input/style.css';
 import PhoneInput from 'react-phone-number-input';
 

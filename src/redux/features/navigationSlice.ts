@@ -6,6 +6,7 @@ interface NavigationState {
   selectedService?: string;
   selectedPackage?: string;
   selectedTime?: string;
+  currentSection?: string;
 }
 
 const initialState: NavigationState = {
@@ -14,6 +15,7 @@ const initialState: NavigationState = {
   selectedService: undefined,
   selectedPackage: undefined,
   selectedTime: undefined,
+  currentSection: undefined,
 };
 
 export const navigationSlice = createSlice({
@@ -42,6 +44,9 @@ export const navigationSlice = createSlice({
       state.selectedPackage = undefined;
       state.selectedTime = undefined;
     },
+    setCurrentSection: (state, action: PayloadAction<string | undefined>) => {
+      state.currentSection = action.payload;
+    },
   },
 });
 
@@ -51,5 +56,6 @@ export const {
   toggleNavbar,
   setServiceSelection,
   clearServiceSelection,
+  setCurrentSection,
 } = navigationSlice.actions;
 export default navigationSlice.reducer;
