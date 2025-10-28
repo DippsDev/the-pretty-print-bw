@@ -29,6 +29,22 @@ export const serviceSlice = createSlice({
       state.bookings = [];
     },
   },
+  extraReducers: (builder) => {
+    builder.addCase('ADD_PACKAGE_SERVICE', (state, action: any) => {
+      const { group, pkg } = action.payload || {};
+      if (!group || !pkg) return;
+      // Find the price for the selected package
+      const priceObj = (group.prices || []).find((p: any) => p.label === pkg);
+      const price = priceObj ? priceObj.value : '';
+      // Add a booking for the package group
+      state.bookings.push({
+        name: group.label,
+        option: pkg,
+        time: '',
+        price,
+      });
+    });
+  },
 });
 
 export const { addBooking, removeBooking, resetBookings } = serviceSlice.actions;

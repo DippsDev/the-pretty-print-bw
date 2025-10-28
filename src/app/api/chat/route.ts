@@ -2,25 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@ai-sdk/openai';
 import { streamText, convertToModelMessages, UIMessage } from 'ai';
 import { buildSystemPrompt, parseTriggerAction, cleanResponseText, generateCacheKey } from '@/lib/chat/promptBuilder';
-import { z } from 'zod';
-
-// Request/Response types
-interface ChatRequest {
-  message: string;
-  conversationId?: string;
-  useCache?: boolean;
-}
-
-interface ChatResponse {
-  message: string;
-  trigger?: any;
-  usage?: {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-  };
-  cached?: boolean;
-}
 
 
 // Main chat endpoint using AI SDK (OpenAI)
@@ -38,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     // Stream response from OpenAI
     const { textStream } = await streamText({
-      model: openai('gpt-4'), // Updated model to gpt-4
+      model: openai('gpt-4.1-mini'), // Updated model to gpt-4.1-mini
       messages: convertToModelMessages(messages),
       system: systemPrompt,
       // You can add tools here if needed

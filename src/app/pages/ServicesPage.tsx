@@ -59,6 +59,16 @@ function ServicesPage() {
   const paymentMethod = useSelector((state: RootState) => state.paymentMethod.selected);
 
   const [step, setStep] = useState<'services' | 'professionals' | 'professionalPerService' | 'time' | 'confirm'>('services');
+  // Listen for navigation step from Redux (for chat triggers)
+  const navigationStep = useSelector((state: RootState) => state.navigation.currentStep);
+  useEffect(() => {
+    if (navigationStep && navigationStep !== step) {
+      // Only set if different
+      if (navigationStep === 'professionals' || navigationStep === 'professionalPerService' || navigationStep === 'time' || navigationStep === 'confirm' || navigationStep === 'services') {
+        setStep(navigationStep);
+      }
+    }
+  }, [navigationStep]);
   const [professionalMode, setProfessionalMode] = useState<'single' | 'perService'>('single');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);

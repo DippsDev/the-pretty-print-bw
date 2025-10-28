@@ -2,13 +2,14 @@
 
 import React from 'react';
 import { useDispatch } from 'react-redux';
-import { setCurrentPage, setServiceSelection, setCurrentSection } from '@/redux/features/navigationSlice';
+import { setCurrentPage, setServiceSelection, setCurrentSection, setStep } from '@/redux/features/navigationSlice';
 import { addBooking } from '@/redux/serviceSlice';
 import { setSelectedProfessional } from '@/redux/professionalSlice';
 import { resolveServiceAndPrice } from '@/lib/chat/serviceResolver';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Inter_Tight } from 'next/font/google';
+import { SERVICES } from '@/lib/servicesData';
 import Loader from './Loader';
 
 type StreamEvent =
@@ -206,10 +207,21 @@ export default function Chatbot() {
     const data = trigger?.data || {};
     if (!action) return;
 
-    if (action === 'navigateTo' && data.page) {
+  if (action === 'navigateTo' && data.page) {
       // If a section/group is specified, set it in Redux (for group navigation)
       if (data.section || data.group) {
         dispatch(setCurrentSection(data.section || data.group));
+      }
+      // Ensure correct step navigation for professionals and timeSelection
+      if (data.page === 'professionals') {
+        dispatch(setCurrentPage('services'));
+        dispatch(setStep('professionals'));
+        return;
+      }
+      if (data.page === 'timeSelection') {
+        dispatch(setCurrentPage('services'));
+        dispatch(setStep('time'));
+        return;
       }
       dispatch(setCurrentPage(String(data.page)));
       return;
@@ -224,16 +236,50 @@ export default function Chatbot() {
     }
 
     if (action === 'addService') {
-      // Always add the service, even if already present (for multi-service booking)
-      const resolved = resolveServiceAndPrice(data.service, data.package);
-      if (resolved) {
-        dispatch(addBooking({ 
-          name: resolved.name, 
-          option: resolved.option ?? '', 
-          time: '', 
-          price: resolved.price ?? '' 
-        }));
-        dispatch(setServiceSelection({ service: resolved.name, pkg: resolved.option, time: '' } as any));
+      if (String(action) === 'bookAppointment') {
+        // Book appointment: add booking, set professional, date, time
+        if (data.professional) {
+          const name = String(data.professional).toLowerCase();
+          const id = name.includes('banele') ? 1 : name.includes('dineo') ? 2 : name.includes('michelle') ? 3 : 0;
+          dispatch(setSelectedProfessional(id));
+        }
+        let resolved = null;
+        if (data.service) {
+          resolved = resolveServiceAndPrice(data.service, data.package);
+        }
+        if (resolved) {
+          dispatch(addBooking({
+            name: resolved.name,
+            option: resolved.option ?? '',
+            time: data.time || '',
+            price: resolved.price ?? ''
+          }));
+          dispatch(setServiceSelection({ service: resolved.name, pkg: resolved.option, time: data.time || '' } as any));
+        }
+        // After confirming booking, ask user if they want to add another service or proceed to payment
+        appendMessage('Would you like to add another service, or proceed to payment?', 'bot');
+        // Wait for user input: handled in handleSend below
+        return;
+      }
+      // For package services, find the full group object and dispatch a custom action
+      const isPackage = ["Couple’s Treatment", "Half-Day Package"].includes(data.service);
+      if (isPackage) {
+        const group = SERVICES.find((g: any) => g.label === data.service);
+        if (group) {
+          dispatch({ type: 'ADD_PACKAGE_SERVICE', payload: { group, pkg: data.package } });
+        }
+      } else {
+        // Always add the service, even if already present (for multi-service booking)
+        const resolved = resolveServiceAndPrice(data.service, data.package);
+        if (resolved) {
+          dispatch(addBooking({ 
+            name: resolved.name, 
+            option: resolved.option ?? '', 
+            time: '', 
+            price: resolved.price ?? '' 
+          }));
+          dispatch(setServiceSelection({ service: resolved.name, pkg: resolved.option, time: '' } as any));
+        }
       }
       dispatch(setCurrentPage('services'));
       return;
@@ -300,6 +346,22 @@ export default function Chatbot() {
 
   // Animate X spin on close
   React.useEffect(() => {
+
+        // After a booking confirmation, if the last bot message was 'Would you like to add another service, or proceed to payment?',
+        // check the user's reply and navigate accordingly
+    const lastBotMsg = messages.length > 0 ? messages[messages.length - 1].text : '';
+    if (lastBotMsg && lastBotMsg.toLowerCase().includes('would you like to add another service')) {
+      // The user's reply is the last message in the messages array with sender 'user'
+      const lastUserMsgObj = [...messages].reverse().find(m => m.sender === 'user');
+      const userReply = lastUserMsgObj ? lastUserMsgObj.text.toLowerCase() : '';
+      if (userReply.includes('pay') || userReply.includes('checkout') || userReply.includes('confirm')) {
+        dispatch(setCurrentPage('services'));
+        dispatch(setStep('confirm'));
+      } else if (userReply.includes('add') || userReply.includes('another') || userReply.includes('service')) {
+        dispatch(setCurrentPage('services'));
+        dispatch(setStep('services'));
+      }
+    }
     if (!open && closing) {
       // After animation, reset closing state
       const timeout = setTimeout(() => setClosing(false), 350);

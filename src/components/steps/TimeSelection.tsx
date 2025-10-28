@@ -5,8 +5,8 @@ import "react-day-picker/style.css";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
-// Helper to get days for the next N days
-function getDays(numDays = 30, startDate?: Date) {
+// Helper to get days for the next N days (default: 90 days)
+function getDays(numDays = 90, startDate?: Date) {
   const days = [];
   const today = startDate ? new Date(startDate) : new Date();
   for (let i = 0; i < numDays; i++) {
@@ -23,6 +23,22 @@ function getDays(numDays = 30, startDate?: Date) {
   return days;
 }
 
+// Generate available times for every day from today, 9am-5pm, 30-minute slots
+function generateAvailableTimes(numDays = 90, startDate?: Date) {
+  const days = getDays(numDays, startDate);
+  const times: string[] = [];
+  for (let hour = 9; hour < 17; hour++) {
+    times.push(`${hour}:00 AM`);
+    times.push(`${hour}:30 AM`);
+  }
+  times[times.length - 1] = '5:00 PM'; // Last slot is 5:00 PM
+  const availableTimes: { [iso: string]: string[] } = {};
+  days.forEach(day => {
+    availableTimes[day.iso] = times;
+  });
+  return availableTimes;
+}
+
 function toLocalDateString(date: Date) {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -30,7 +46,7 @@ function toLocalDateString(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-const NUM_DAYS = 30;
+const NUM_DAYS = 90;
 const MAX_DAYS = 90; // Maximum days to render in carousel at any time
 const CALENDAR_START = new Date();
 
@@ -55,7 +71,7 @@ interface TimeSelectionModalProps {
 const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   onBack,
   onContinue,
-  availableTimes = {},
+  availableTimes = generateAvailableTimes(NUM_DAYS, CALENDAR_START),
   onOpenProfessionalModal,
   professionalMode = 'single',
   bookings,
