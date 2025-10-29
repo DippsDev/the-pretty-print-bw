@@ -1,48 +1,241 @@
 "use client";
 
-import React from 'react';
-import { useDispatch } from 'react-redux';
+import React, { useEffect, useRef, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useChat } from '@ai-sdk/react';
+import { lastAssistantMessageIsCompleteWithToolCalls, DefaultChatTransport } from 'ai';
 import { setCurrentPage, setServiceSelection, setCurrentSection, setStep } from '@/redux/features/navigationSlice';
-import { addBooking } from '@/redux/serviceSlice';
+import { addBooking, removeBooking } from '@/redux/serviceSlice';
 import { setSelectedProfessional } from '@/redux/professionalSlice';
+import { updateBookingStatus } from '@/redux/features/bookingStatusSlice';
 import { resolveServiceAndPrice } from '@/lib/chat/serviceResolver';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 import { Inter_Tight } from 'next/font/google';
 import { SERVICES } from '@/lib/servicesData';
 import Loader from './Loader';
+import type { RootState } from '@/redux/store';
 
-type StreamEvent =
-  | { type: 'content'; text: string }
-  | { type: 'complete'; message: string; trigger?: any }
-  | { type: 'error'; error: string };
+// Tool call input types
+interface AddServiceInput {
+  service: string;
+  package?: string;
+}
 
-interface Message {
-  id: string;
-  text: string;
-  sender: 'user' | 'bot';
+interface NavigateToInput {
+  page: 'services' | 'professionals' | 'timeSelection';
+  section?: string;
+  // Accept group as an alternative field name from the model
+  group?: string;
+}
+
+interface SelectProfessionalInput {
+  professional: string;
+}
+
+interface CheckAvailabilityInput {
+  service?: string;
+  professional?: string;
+  date?: string;
+  time?: string;
 }
 
 const interTight = Inter_Tight({ subsets: ['latin'], weight: '400' });
 
 export default function Chatbot() {
-  const [open, setOpen] = React.useState(false);
-  const [input, setInput] = React.useState('');
-  const [sending, setSending] = React.useState(false);
-  const [botStreaming, setBotStreaming] = React.useState(false);
-  const [messages, setMessages] = React.useState<Message[]>([]);
-  const listRef = React.useRef<HTMLDivElement>(null);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const streamingBotMsgIdRef = React.useRef<string | null>(null);
-  const [hasUnread, setHasUnread] = React.useState(false);
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [hasUnread, setHasUnread] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const dispatch = useDispatch();
+  const bookingStatus = useSelector((state: RootState) => state.bookingStatus.status);
+  // Track processed tool calls to avoid duplicate executions across bubbles
+  const handledToolCallsRef = useRef<Set<string>>(new Set());
+  // Track assistant texts shown in current reply to avoid duplicate text bubbles on retries
+  const seenAssistantTextsRef = useRef<Set<string>>(new Set());
+  const normalizeText = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').replace(/[\p{P}\p{S}]+/gu, '').trim();
+  // Track processed tool results (server-executed) to avoid duplicate state updates
+  const handledToolResultsRef = useRef<Set<string>>(new Set());
+  const bookings = useSelector((state: RootState) => state.service.bookings);
+  // Helpers for package groups
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const findPackageGroupByLabel = (label?: string) => {
+    const t = norm(String(label || ''));
+    return SERVICES.find(
+      g => Array.isArray((g as any).prices) && (g as any).prices.length > 0 && (norm(g.label) === t || norm(g.label).includes(t) || t.includes(norm(g.label)))
+    );
+  };
+  const choosePackageLabel = (group: any, pkgText?: string) => {
+    const choices: string[] = (group?.prices || []).map((p: any) => p.label);
+    if (!choices.length) return undefined;
+    if (!pkgText) return choices[0];
+    const p = norm(pkgText);
+    if (/(^|\s)1(\s|$)|for 1|for one|single/.test(p)) return choices.find(c => norm(c).includes('1')) || choices[0];
+    if (/(^|\s)2(\s|$)|for 2|for two|couple|couples/.test(p)) return choices.find(c => norm(c).includes('2')) || choices[choices.length-1];
+    return choices[0];
+  };
 
-  React.useEffect(() => {
+  // Use AI SDK's useChat hook
+  const { messages, sendMessage, addToolResult, error } = useChat({
+    transport: new DefaultChatTransport({
+      api: '/api/chat',
+    }),
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    
+    // Handle tool calls automatically
+    async onToolCall({ toolCall }) {
+      if (toolCall.dynamic) return;
+      // Deduplicate repeated toolCallIds coming from stitched assistant messages
+      if (handledToolCallsRef.current.has(toolCall.toolCallId)) {
+        return;
+      }
+      handledToolCallsRef.current.add(toolCall.toolCallId);
+
+      switch (toolCall.toolName) {
+        case 'addService': {
+          // Server executes this tool; avoid client-side state mutations to prevent duplicates.
+          return;
+        }
+
+        case 'navigateTo': {
+          const input = toolCall.input as NavigateToInput;
+          const { page } = input;
+          // Support both section and group keys, normalize against SERVICES labels
+          const rawSection = (input.section || (input as any).group || '').toString();
+
+          const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          const resolveSectionLabel = (name: string): string | undefined => {
+            if (!name) return undefined;
+            const target = normalize(name);
+            // Try exact label match (case-insensitive)
+            const exact = SERVICES.find(g => normalize(g.label) === target)?.label;
+            if (exact) return exact;
+            // Try startsWith/contains (handles pluralization like "facials" -> "Facial")
+            const fuzzy = SERVICES.find(g =>
+              normalize(g.label) === target ||
+              normalize(g.label).startsWith(target) ||
+              target.startsWith(normalize(g.label))
+            )?.label;
+            if (fuzzy) return fuzzy;
+            // Synonym: generic "packages" should map to Half-Day Package
+            if (target.includes('package')) {
+              const half = SERVICES.find(g => normalize(g.label).includes('half day package'))?.label;
+              if (half) return half;
+            }
+            return undefined;
+          };
+
+          // If provided section didn't match a group, try to resolve by service name -> its parent group
+          let resolvedSection = resolveSectionLabel(rawSection);
+          if (!resolvedSection && rawSection) {
+            const serviceGroup = SERVICES.find(g => (g.services || []).some(s => normalize(s.name) === normalize(rawSection)));
+            if (serviceGroup) {
+              resolvedSection = serviceGroup.label;
+            }
+          }
+          if (resolvedSection) {
+            dispatch(setCurrentSection(resolvedSection));
+          }
+
+          if (page === 'professionals') {
+            dispatch(setCurrentPage('services'));
+            dispatch(setStep('professionals'));
+          } else if (page === 'timeSelection') {
+            dispatch(setCurrentPage('services'));
+            dispatch(setStep('time'));
+          } else {
+            // Default to services step
+            dispatch(setCurrentPage('services'));
+            dispatch(setStep('services'));
+          }
+          
+          addToolResult({
+            tool: 'navigateTo',
+            toolCallId: toolCall.toolCallId,
+            output: `Navigating to ${page}${resolvedSection ? ` - ${resolvedSection}` : ''}`
+          });
+          break;
+        }
+
+        case 'selectProfessional': {
+          const input = toolCall.input as SelectProfessionalInput;
+          const { professional } = input;
+          const name = professional.toLowerCase();
+          const id = name.includes('banele') ? 1 : name.includes('dineo') ? 2 : name.includes('michelle') ? 3 : 0;
+          
+          dispatch(setSelectedProfessional(id));
+          
+          addToolResult({
+            tool: 'selectProfessional',
+            toolCallId: toolCall.toolCallId,
+            output: `Selected ${professional} as your professional`
+          });
+          break;
+        }
+
+        case 'checkAvailability': {
+          const input = toolCall.input as CheckAvailabilityInput;
+          const { service: checkService, professional: checkProf, time: checkTime, date: checkDate } = input;
+          let available = true;
+          let message = 'Available';
+          
+          if (checkDate && checkTime && bookingStatus) {
+            // Check specific date and time
+            const isBooked = bookingStatus.bookedSlots[checkDate]?.includes(checkTime) || false;
+            available = !isBooked;
+            message = isBooked ? 
+              `Time slot ${checkTime} on ${checkDate} is not available` : 
+              `Time slot ${checkTime} on ${checkDate} is available`;
+          } else if (checkDate && bookingStatus) {
+            // Check available times for a specific date
+            const availableTimes = bookingStatus.bookedSlots[checkDate] ? 
+              bookingStatus.availableTimes.filter(time => !bookingStatus.bookedSlots[checkDate].includes(time)) :
+              bookingStatus.availableTimes;
+            message = `Available times for ${checkDate}: ${availableTimes.join(', ')}`;
+          } else if (checkTime && bookingStatus) {
+            const isBooked = bookingStatus.bookedTimes.includes(checkTime);
+            available = !isBooked;
+            message = isBooked ? `Time slot ${checkTime} is not available` : `Time slot ${checkTime} is available`;
+          }
+          
+          if (checkProf && bookingStatus) {
+            const prof = bookingStatus.professionals.find(p => 
+              p.name.toLowerCase() === checkProf.toLowerCase()
+            );
+            if (!prof || !prof.available) {
+              available = false;
+              message = `Professional ${checkProf} is not available`;
+            }
+          }
+          
+          addToolResult({
+            tool: 'checkAvailability',
+            toolCallId: toolCall.toolCallId,
+            output: message
+          });
+          break;
+        }
+      }
+    },
+
+    // Handle real-time data updates
+    onData: ({ data, type }) => {
+      if (type === 'data-booking-status') {
+        dispatch(updateBookingStatus(data as any));
+      }
+    },
+  });
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   // Scroll to bottom when opening the chatbot
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) {
       setTimeout(() => {
         listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -51,7 +244,7 @@ export default function Chatbot() {
   }, [open]);
 
   // Focus input when opening
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) {
       const id = requestAnimationFrame(() => inputRef.current?.focus());
       return () => cancelAnimationFrame(id);
@@ -59,7 +252,7 @@ export default function Chatbot() {
   }, [open]);
 
   // Close on Escape
-  React.useEffect(() => {
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') setOpen(false);
     }
@@ -68,7 +261,7 @@ export default function Chatbot() {
   }, []);
 
   // Close on outside click
-  React.useEffect(() => {
+  useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
       if (
@@ -82,292 +275,138 @@ export default function Chatbot() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  function appendMessage(text: string, sender: 'user' | 'bot') {
-    setMessages(prev => [...prev, { id: String(Date.now() + Math.random()), text, sender }]);
-  }
-
-  // Create or update a streaming bot bubble for smoothness
-  function upsertStreamingBotMessage(partial: string) {
-    // Remove any <trigger>...</trigger> from the streaming text before showing to user
-    const cleanText = partial.replace(/<trigger>[\s\S]*?<\/trigger>/g, '').trim();
-    setMessages(prev => {
-      if (!streamingBotMsgIdRef.current) {
-        const id = String(Date.now() + Math.random());
-        streamingBotMsgIdRef.current = id;
-        return [...prev, { id, text: cleanText, sender: 'bot' }];
-      }
-      const id = streamingBotMsgIdRef.current;
-      if (!prev.some(m => m.id === id)) {
-        return [...prev, { id, text: cleanText, sender: 'bot' }];
-      }
-      return prev.map(m => (m.id === id ? { ...m, text: cleanText } : m));
-    });
-  }
-
-  function finalizeStreamingBotMessage() {
-    // Remove the streaming bot message id, but do NOT add a new message.
-    streamingBotMsgIdRef.current = null;
-  }
-
-  // Simulate streaming effect for a bot message (character by character)
-  async function simulateStreamingBotMessage(fullText: string) {
-    const id = String(Date.now() + Math.random());
-    streamingBotMsgIdRef.current = id;
-    setMessages(prev => [...prev, { id, text: '', sender: 'bot' }]);
-    for (let i = 1; i <= fullText.length; i++) {
-      await new Promise(res => setTimeout(res, 7 + Math.random() * 12));
-      setMessages(prev => prev.map(m => m.id === id ? { ...m, text: fullText.slice(0, i) } : m));
-    }
-  }
-
-  async function handleSend() {
-    const content = input.trim();
-    if (!content || sending) return;
+  // Handle send message
+  const handleSend = () => {
+    if (!input.trim()) return;
+    sendMessage({ text: input });
     setInput('');
-    appendMessage(content, 'user');
-    setSending(true);
-    setBotStreaming(true);
+  };
 
+  // Handle booking confirmation
+  const handleBookingConfirmation = async (date: string, time: string, duration: number, professional?: string) => {
     try {
-      // Build UIMessage[] for API
-      const uiMessages = [
-        ...messages.map(m => ({
-          role: m.sender === 'user' ? 'user' : 'assistant',
-          parts: [{ type: 'text', text: m.text }],
-        })),
-        {
-          role: 'user',
-          parts: [{ type: 'text', text: content }],
-        },
-      ];
-
-      const res = await fetch('/api/chat', {
+      const response = await fetch('/api/chat/updates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: uiMessages }),
+        body: JSON.stringify({ date, time, duration, professional }),
       });
-
-      if (!res.ok || !res.body) {
-        appendMessage('Sorry, something went wrong connecting to Bel Amour assistant.', 'bot');
-        setBotStreaming(false);
-        setSending(false);
-        return;
+      
+      if (response.ok) {
+        // Booking successful, the real-time updates will handle the status change
+        console.log('Booking confirmed for', date, time);
       }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let botBuffer = '';
-      let finalMessage = '';
-      let finalTrigger = null;
-      // Remove any previous streaming bot message before starting a new one
-      setMessages(prev => prev.filter(m => !streamingBotMsgIdRef.current || m.id !== streamingBotMsgIdRef.current));
-      streamingBotMsgIdRef.current = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n\n').filter(Boolean);
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const payload = JSON.parse(line.replace('data: ', '')) as StreamEvent;
-          if (payload.type === 'content') {
-            botBuffer += payload.text;
-          } else if (payload.type === 'complete') {
-            finalMessage = payload.message || '';
-            finalTrigger = payload.trigger;
-          }
-        }
-      }
-
-      // After stream, show the cleaned message as if streaming
-      if (finalMessage) {
-        const cleanText = finalMessage.replace(/<trigger>[\s\S]*?<\/trigger>/g, '').trim();
-        await simulateStreamingBotMessage(cleanText);
-        finalizeStreamingBotMessage();
-        if (finalTrigger) handleTrigger(finalTrigger);
-      } else if (botBuffer) {
-        // fallback if no final message
-        const cleanText = botBuffer.replace(/<trigger>[\s\S]*?<\/trigger>/g, '').trim();
-        await simulateStreamingBotMessage(cleanText);
-        finalizeStreamingBotMessage();
-      }
-    } catch (e) {
-      appendMessage('Sorry, an error occurred while contacting Bel Amour assistant.', 'bot');
-    } finally {
-      setSending(false);
-      setBotStreaming(false);
-      // If panel is closed when a bot message arrives, show unread dot
-      if (!open) setHasUnread(true);
+    } catch (error) {
+      console.error('Failed to confirm booking:', error);
     }
-  }
-
-  function handleTrigger(trigger: any) {
-    const action = trigger?.action as string | undefined;
-    const data = trigger?.data || {};
-    if (!action) return;
-
-  if (action === 'navigateTo' && data.page) {
-      // If a section/group is specified, set it in Redux (for group navigation)
-      if (data.section || data.group) {
-        dispatch(setCurrentSection(data.section || data.group));
-      }
-      // Ensure correct step navigation for professionals and timeSelection
-      if (data.page === 'professionals') {
-        dispatch(setCurrentPage('services'));
-        dispatch(setStep('professionals'));
-        return;
-      }
-      if (data.page === 'timeSelection') {
-        dispatch(setCurrentPage('services'));
-        dispatch(setStep('time'));
-        return;
-      }
-      dispatch(setCurrentPage(String(data.page)));
-      return;
-    }
-
-    if (action === 'selectProfessional' && data.professional) {
-      // Map names to known IDs from ProfessionalSelection.tsx
-      const name = String(data.professional).toLowerCase();
-      const id = name.includes('banele') ? 1 : name.includes('dineo') ? 2 : name.includes('michelle') ? 3 : 0;
-      dispatch(setSelectedProfessional(id));
-      return;
-    }
-
-    if (action === 'addService') {
-      if (String(action) === 'bookAppointment') {
-        // Book appointment: add booking, set professional, date, time
-        if (data.professional) {
-          const name = String(data.professional).toLowerCase();
-          const id = name.includes('banele') ? 1 : name.includes('dineo') ? 2 : name.includes('michelle') ? 3 : 0;
-          dispatch(setSelectedProfessional(id));
-        }
-        let resolved = null;
-        if (data.service) {
-          resolved = resolveServiceAndPrice(data.service, data.package);
-        }
-        if (resolved) {
-          dispatch(addBooking({
-            name: resolved.name,
-            option: resolved.option ?? '',
-            time: data.time || '',
-            price: resolved.price ?? ''
-          }));
-          dispatch(setServiceSelection({ service: resolved.name, pkg: resolved.option, time: data.time || '' } as any));
-        }
-        // After confirming booking, ask user if they want to add another service or proceed to payment
-        appendMessage('Would you like to add another service, or proceed to payment?', 'bot');
-        // Wait for user input: handled in handleSend below
-        return;
-      }
-      // For package services, find the full group object and dispatch a custom action
-      const isPackage = ["Couple’s Treatment", "Half-Day Package"].includes(data.service);
-      if (isPackage) {
-        const group = SERVICES.find((g: any) => g.label === data.service);
-        if (group) {
-          dispatch({ type: 'ADD_PACKAGE_SERVICE', payload: { group, pkg: data.package } });
-        }
-      } else {
-        // Always add the service, even if already present (for multi-service booking)
-        const resolved = resolveServiceAndPrice(data.service, data.package);
-        if (resolved) {
-          dispatch(addBooking({ 
-            name: resolved.name, 
-            option: resolved.option ?? '', 
-            time: '', 
-            price: resolved.price ?? '' 
-          }));
-          dispatch(setServiceSelection({ service: resolved.name, pkg: resolved.option, time: '' } as any));
-        }
-      }
-      dispatch(setCurrentPage('services'));
-      return;
-    }
-
-    if (action === 'checkAvailability') {
-      // 1. Set professional if provided
-      if (data.professional) {
-        const name = String(data.professional).toLowerCase();
-        const id = name.includes('banele') ? 1 : name.includes('dineo') ? 2 : name.includes('michelle') ? 3 : 0;
-        dispatch(setSelectedProfessional(id));
-      }
-      // 2. Resolve service
-      let resolved = null;
-      if (data.service) {
-        resolved = resolveServiceAndPrice(data.service, data.package);
-      }
-      // 3. Available times (should match promptBuilder)
-      const AVAILABLE_TIMES = [
-        "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
-        "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-        "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM"
-      ];
-      let selectedTime = '';
-      let requestedTime = data.time;
-      if (requestedTime && typeof requestedTime === 'string') {
-        // Normalize time string
-        const norm = (s: string) => s.replace(/\s+/g, '').replace(/:00/, ':0').toLowerCase();
-        const found = AVAILABLE_TIMES.find(t => norm(t) === norm(requestedTime));
-        if (found) {
-          selectedTime = found;
-        } else {
-          // Not available, find next available
-          const idx = AVAILABLE_TIMES.findIndex(t => t > requestedTime);
-          const nextAvailable = idx !== -1 ? AVAILABLE_TIMES[idx] : null;
-          // Inform user
-          appendMessage(
-            `Sorry, ${requestedTime} is not available. The next available time is ${nextAvailable || 'tomorrow'}. Please select a time.`,
-            'bot'
-          );
-        }
-      }
-      // 4. Set service selection with time if available
-      if (resolved) {
-        dispatch(setServiceSelection({ service: resolved.name, pkg: resolved.option, time: selectedTime } as any));
-      }
-      // 5. Always go to time selection step (services page)
-      dispatch(setCurrentPage('services'));
-      return;
-    }
-  }
-
-  // Track the current streaming bot message (if any)
-  const streamingBotMsgId = streamingBotMsgIdRef.current;
-  const streamingBotMsg = streamingBotMsgId
-    ? messages.find(m => m.id === streamingBotMsgId)
-    : null;
-
-  // Track panel ref for outside click
-  const panelRef = React.useRef<HTMLDivElement>(null);
-
-  // Track if we are closing (for X spin animation)
-  const [closing, setClosing] = React.useState(false);
+  };
 
   // Animate X spin on close
-  React.useEffect(() => {
-
-        // After a booking confirmation, if the last bot message was 'Would you like to add another service, or proceed to payment?',
-        // check the user's reply and navigate accordingly
-    const lastBotMsg = messages.length > 0 ? messages[messages.length - 1].text : '';
-    if (lastBotMsg && lastBotMsg.toLowerCase().includes('would you like to add another service')) {
-      // The user's reply is the last message in the messages array with sender 'user'
-      const lastUserMsgObj = [...messages].reverse().find(m => m.sender === 'user');
-      const userReply = lastUserMsgObj ? lastUserMsgObj.text.toLowerCase() : '';
-      if (userReply.includes('pay') || userReply.includes('checkout') || userReply.includes('confirm')) {
-        dispatch(setCurrentPage('services'));
-        dispatch(setStep('confirm'));
-      } else if (userReply.includes('add') || userReply.includes('another') || userReply.includes('service')) {
-        dispatch(setCurrentPage('services'));
-        dispatch(setStep('services'));
-      }
-    }
+  useEffect(() => {
     if (!open && closing) {
-      // After animation, reset closing state
       const timeout = setTimeout(() => setClosing(false), 350);
       return () => clearTimeout(timeout);
     }
   }, [open, closing]);
+
+  // React to server-executed tool results (output-available) and update Redux once
+  useEffect(() => {
+    for (const message of messages) {
+      if (message.role === 'user') continue;
+      for (const part of message.parts as any[]) {
+        if (!part || typeof part.type !== 'string') continue;
+        if (!part.type.startsWith('tool-')) continue;
+        if (part.state !== 'output-available') continue;
+        const callId: string | undefined = part.toolCallId;
+        if (!callId || handledToolResultsRef.current.has(callId)) continue;
+
+        const toolName = part.type.replace('tool-', '');
+        try {
+          switch (toolName) {
+            case 'addService': {
+              const svcName: string = part.output?.service || part.input?.service || '';
+              const pkg: string | undefined = part.output?.option || part.input?.package;
+
+              // Package group path from server
+              const pkgGroup = findPackageGroupByLabel(svcName);
+              if (pkgGroup) {
+                const selectedPkg = choosePackageLabel(pkgGroup as any, pkg);
+                if (selectedPkg) {
+                  // Dedupe
+                  const existsPkg = bookings.some(b => b.name === pkgGroup.label && (b.option || '') === selectedPkg);
+                  if (!existsPkg) {
+                    dispatch({ type: 'ADD_PACKAGE_SERVICE', payload: { group: pkgGroup, pkg: selectedPkg } });
+                  }
+                  // Navigate and show correct section
+                  dispatch(setCurrentPage('services'));
+                  dispatch(setCurrentSection(pkgGroup.label));
+                  dispatch(setStep('services'));
+                  break;
+                }
+              }
+
+              const resolved = resolveServiceAndPrice(svcName, pkg);
+              if (!resolved) break;
+              const exists = bookings.some(b => b.name === resolved.name && (b.option || '') === (resolved.option || ''));
+              if (!exists) {
+                dispatch(addBooking({ name: resolved.name, option: resolved.option || '', time: '', price: resolved.price || '' }));
+                dispatch(setServiceSelection({ service: resolved.name, pkg: resolved.option || '', time: '' }));
+              }
+              break;
+            }
+            case 'navigateTo': {
+              const page: string = part.output?.page || part.input?.page || 'services';
+              const rawSection: string = part.output?.section || part.input?.section || part.input?.group || '';
+              const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+              const resolveSectionLabel = (name: string): string | undefined => {
+                if (!name) return undefined;
+                const target = normalize(name);
+                const exact = SERVICES.find(g => normalize(g.label) === target)?.label;
+                if (exact) return exact;
+                const fuzzy = SERVICES.find(g =>
+                  normalize(g.label) === target ||
+                  normalize(g.label).startsWith(target) ||
+                  target.startsWith(normalize(g.label))
+                )?.label;
+                if (fuzzy) return fuzzy;
+                if (target.includes('package')) {
+                  const half = SERVICES.find(g => normalize(g.label).includes('half day package'))?.label;
+                  if (half) return half;
+                }
+                return undefined;
+              };
+              let resolvedSection = resolveSectionLabel(rawSection);
+              if (!resolvedSection && rawSection) {
+                const group = SERVICES.find(g => (g.services || []).some(s => normalize(s.name) === normalize(rawSection)));
+                if (group) resolvedSection = group.label;
+              }
+              if (resolvedSection) dispatch(setCurrentSection(resolvedSection));
+              if (page === 'professionals') {
+                dispatch(setCurrentPage('services'));
+                dispatch(setStep('professionals'));
+              } else if (page === 'timeSelection') {
+                dispatch(setCurrentPage('services'));
+                dispatch(setStep('time'));
+              } else {
+                dispatch(setCurrentPage('services'));
+                dispatch(setStep('services'));
+              }
+              break;
+            }
+            case 'selectProfessional': {
+              const professional: string = part.output?.professional || part.input?.professional || '';
+              const name = professional.toLowerCase();
+              const id = name.includes('banele') ? 1 : name.includes('dineo') ? 2 : name.includes('michelle') ? 3 : 0;
+              dispatch(setSelectedProfessional(id));
+              break;
+            }
+            // checkAvailability result is UI-only here
+          }
+        } finally {
+          handledToolResultsRef.current.add(callId);
+        }
+      }
+    }
+  }, [messages, dispatch]);
 
   return (
     <div className={interTight.className}>
@@ -437,37 +476,115 @@ export default function Chatbot() {
                 <Image src="/assistant.png" alt="Assistant" width={28} height={28} className="h-7 w-7 rounded-full object-cover" />
                 <div className="text-sm font-semibold text-[#141414]">Bel Assistant</div>
               </div>
-              {/* removed status */}
             </div>
 
             {/* Messages */}
             <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-3 bg-white">
               <div className="space-y-2">
-                {/* Render all messages in order, including streaming bot message */}
-                {messages.map(m => (
-                  <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {(() => {
+                  // Track tool parts we've already displayed in this assistant reply (between user messages)
+                  const seenToolCallIds = new Set<string>();
+                  // Track last assistant pure-text content to avoid duplicate text bubbles
+                  let lastAssistantText = '';
+                  return messages.map(message => {
+                    const isAssistant = message.role !== 'user';
+                    // Suppress tool banners only when this assistant message contains text parts
+                    const hasAssistantText = isAssistant && message.parts.some(p => p.type === 'text' && !!(p as any).text);
+                    const suppressToolProcessing = hasAssistantText;
+                    // Reset dedupe when a new user message starts
+                    if (!isAssistant) {
+                      seenToolCallIds.clear();
+                      lastAssistantText = '';
+                      seenAssistantTextsRef.current.clear();
+                    }
+
+                    // If this assistant message is only text and equals previous assistant text, skip
+                    if (isAssistant) {
+                      const textContent = message.parts
+                        .filter(p => p.type === 'text')
+                        .map(p => (p as any).text || '')
+                        .join('\n')
+                        .trim();
+                      const norm = textContent ? normalizeText(textContent) : '';
+                      if (norm && (norm === normalizeText(lastAssistantText) || seenAssistantTextsRef.current.has(norm))) {
+                        return null;
+                      }
+                      if (norm) {
+                        lastAssistantText = textContent;
+                        seenAssistantTextsRef.current.add(norm);
+                      }
+                    }
+
+                    return (
+                  <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.15 }}
-                      className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${m.sender === 'user' ? 'bg-[#141414] text-white' : 'bg-[#f6f6f6] text-[#141414] border border-black/5'}`}
+                      className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+                        message.role === 'user' 
+                          ? 'bg-[#141414] text-white' 
+                          : 'bg-[#f6f6f6] text-[#141414] border border-black/5'
+                      }`}
                     >
-                      {m.text}
+                      {message.parts.map((part, index) => {
+                        const toolCallId = (part as any).toolCallId as string | undefined;
+                        // If we've already shown this tool call in a previous bubble of the same reply, skip it
+                        if (isAssistant && toolCallId && seenToolCallIds.has(toolCallId)) {
+                          return null;
+                        }
+                        switch (part.type) {
+                          case 'text':
+                            return <div key={index}>{part.text}</div>;
+                          case 'tool-call':
+                            if (suppressToolProcessing) return null;
+                            if (toolCallId) seenToolCallIds.add(toolCallId);
+                            return (
+                              <div key={index} className="text-xs text-gray-500 italic">
+                                Processing tool...
+                              </div>
+                            );
+                          case 'tool-result':
+                            if (suppressToolProcessing) return null;
+                            if (toolCallId) seenToolCallIds.add(toolCallId);
+                            return (
+                              <div key={index} className="text-xs text-green-600">
+                                ✓ Tool completed
+                              </div>
+                            );
+                          default:
+                            // Handle tool parts with different states
+                            if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
+                              if (suppressToolProcessing) return null;
+                              const toolName = part.type.replace('tool-', '');
+                              if (toolCallId) seenToolCallIds.add(toolCallId);
+                              return (
+                                <div key={index} className="text-xs text-gray-500 italic">
+                                  Processing {toolName}...
+                                </div>
+                              );
+                            }
+                            return null;
+                        }
+                      })}
                     </motion.div>
                   </div>
-                ))}
+                    );
+                  });
+                })()}
 
-                {/* Loader bubble if bot is streaming but no content yet */}
-                {botStreaming && !streamingBotMsg && (
+                {/* Loading indicator - removed since isLoading is not available */}
+
+                {/* Error message */}
+                {error && (
                   <div className="flex justify-start">
                     <motion.div
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.15 }}
-                      className="max-w-[80%] rounded-2xl px-5 py-2 bg-[#f6f6f6] border border-black/5 flex items-center"
-                      style={{ minWidth: 64 }}
+                      className="max-w-[80%] rounded-2xl px-3 py-2 text-sm bg-red-50 text-red-600 border border-red-200"
                     >
-                      <Loader />
+                      Sorry, something went wrong. Please try again.
                     </motion.div>
                   </div>
                 )}
@@ -484,10 +601,11 @@ export default function Chatbot() {
                   placeholder="Ask about services, availability, bookings…"
                   className="flex-1 rounded-full border border-black/10 px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 text-[#141414] placeholder-[#7B8487]"
                   ref={inputRef}
+                  disabled={false}
                 />
                 <motion.button
                   onClick={handleSend}
-                  disabled={sending || !input.trim()}
+                  disabled={!input.trim()}
                   whileTap={{ scale: 0.97 }}
                   className="h-9 px-4 rounded-full bg-[#141414] text-white text-sm font-medium disabled:opacity-50"
                 >

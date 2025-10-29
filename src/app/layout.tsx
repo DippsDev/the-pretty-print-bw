@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import BackgroundImage from "@/components/BackgroundImage";
 import MainContentOverlay from "@/components/MainContentOverlay";
 import Chatbot from "@/components/chat/Chatbot";
+import BookingUpdatesProvider from "@/components/BookingUpdatesProvider";
 
 // Chatbot is a Client Component; importing directly is supported from a Server Component
 
@@ -47,6 +48,7 @@ export default function RootLayout({
     <html lang="en" className={fsBrabo.className}>
       <body className={`bg-white/90 relative overflow-hidden`}>
         <Providers>
+          <BookingUpdatesProvider />
           <BackgroundImage />
           <Navbar />
           <main className="bg-white h-[100dvh] w-[100dvw]">

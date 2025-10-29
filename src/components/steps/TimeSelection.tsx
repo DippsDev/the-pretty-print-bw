@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { Inter_Tight } from "next/font/google";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/redux/store";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
@@ -24,17 +26,23 @@ function getDays(numDays = 90, startDate?: Date) {
 }
 
 // Generate available times for every day from today, 9am-5pm, 30-minute slots
-function generateAvailableTimes(numDays = 90, startDate?: Date) {
+function generateAvailableTimes(numDays = 90, startDate?: Date, bookedSlots?: { [date: string]: string[] }) {
   const days = getDays(numDays, startDate);
-  const times: string[] = [];
-  for (let hour = 9; hour < 17; hour++) {
-    times.push(`${hour}:00 AM`);
-    times.push(`${hour}:30 AM`);
-  }
-  times[times.length - 1] = '5:00 PM'; // Last slot is 5:00 PM
+  const times: string[] = [
+    "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+    "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
+    "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM"
+  ];
+  
   const availableTimes: { [iso: string]: string[] } = {};
   days.forEach(day => {
-    availableTimes[day.iso] = times;
+    // If there are booked slots for this date, filter them out
+    if (bookedSlots && bookedSlots[day.iso]) {
+      availableTimes[day.iso] = times.filter(time => !bookedSlots[day.iso].includes(time));
+    } else {
+      // All times available if no bookings for this date
+      availableTimes[day.iso] = [...times];
+    }
   });
   return availableTimes;
 }
@@ -71,7 +79,7 @@ interface TimeSelectionModalProps {
 const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   onBack,
   onContinue,
-  availableTimes = generateAvailableTimes(NUM_DAYS, CALENDAR_START),
+  availableTimes,
   onOpenProfessionalModal,
   professionalMode = 'single',
   bookings,
@@ -84,6 +92,16 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   setSelectedDate,
   setSelectedTime,
 }) => {
+  // Get booking status from Redux
+  const bookingStatus = useSelector((state: RootState) => state.bookingStatus.status);
+  
+  // Generate available times based on real-time booking data
+  const realTimeAvailableTimes = React.useMemo(() => {
+    return generateAvailableTimes(NUM_DAYS, CALENDAR_START, bookingStatus?.bookedSlots);
+  }, [bookingStatus?.bookedSlots]);
+  
+  // Use real-time data if available, otherwise fall back to prop
+  const effectiveAvailableTimes = availableTimes || realTimeAvailableTimes;
   // Track the start date and number of days for the carousel range
   const [carouselStartDate, setCarouselStartDate] = useState<Date>(CALENDAR_START);
   const [carouselNumDays, setCarouselNumDays] = useState(NUM_DAYS);
@@ -118,7 +136,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   // Defensive: ensure selectedDayIdx is valid and days is not empty
   const safeSelectedDayIdx = Math.max(0, Math.min(selectedDayIdx, days.length - 1));
   const selectedDay = days[safeSelectedDayIdx] ?? days[0];
-  const times = selectedDay ? (availableTimes[selectedDay.iso] || []) : [];
+  const times = selectedDay ? (effectiveAvailableTimes[selectedDay.iso] || []) : [];
 
   // Call onContinue as soon as a time is selected (prevent infinite loop)
   const lastSentRef = useRef<{ date: string; time: string } | null>(null);
@@ -486,11 +504,11 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
         ) : (
           <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full" style={{ alignSelf: 'center' }}>
             <div className="text-lg font-semibold mt-6 text-[#141414]">Fully booked on this date</div>
-            <div className="text-sm text-[#7B8487]">Available from {days.find((d, i) => (availableTimes[d.iso] || []).length > 0 && i > selectedDayIdx)?.label || "another day"}</div>
+            <div className="text-sm text-[#7B8487]">Available from {days.find((d, i) => (effectiveAvailableTimes[d.iso] || []).length > 0 && i > selectedDayIdx)?.label || "another day"}</div>
             <div className="flex gap-2 mt-2">
               <button className="px-4 py-2 rounded-full border font-medium text-[#33383C] hover:bg-gray-100" onClick={() => {
                 // Go to next available date
-                const nextIdx = days.findIndex((d, i) => (availableTimes[d.iso] || []).length > 0 && i > selectedDayIdx);
+                const nextIdx = days.findIndex((d, i) => (effectiveAvailableTimes[d.iso] || []).length > 0 && i > selectedDayIdx);
                 if (nextIdx !== -1) setSelectedDayIdx(nextIdx);
               }}>Go to next available date</button>
               <button className="px-4 py-2 rounded-full border font-medium text-[#33383C] hover:bg-gray-100">Join waitlist</button>
