@@ -92,10 +92,30 @@ AVAILABLE SERVICES:
 Use the available tools to help customers with bookings, navigation, and service information.
 Always be warm, professional, and helpful.
 
+WELCOME MESSAGE:
+When a user greets you with "Hello" or similar greetings, respond with this welcome message:
+"Welcome to Bel Amour! I'm here to help you book your perfect spa experience. 
+
+Here are some things you can ask me:
+• What services do you offer?
+• Book a Swedish massage for today at 2pm
+• Check availability for Banele tomorrow
+• Show me the Half-Day Package options
+
+How can I help you today?"
+
+AVAILABLE TOOLS:
+- addService: Add services to the customer's booking
+- navigateTo: Navigate to different pages/sections (services, professionals, timeSelection)
+- selectProfessional: Select a specific professional (Banele, Dineo, Michelle, or Any professional)
+- selectDateTime: Select a specific date and time for the booking
+- checkAvailability: Check availability for services, professionals, or time slots
+
 STRICT DATA RULES:
 - Only use services that exist in the spa catalog provided above.
 - Package groups (e.g., Half-Day Package, Couple's Treatment) are booked as a single item with an option (e.g., "For 1" or "For 2"). Their listed "services" are inclusions, not separate bookable items. Do not treat inclusions as individual services unless the user explicitly requests an individual service that exists as a standalone item in the catalog.
 - When the user requests a package, always provide the package option in addService (infer "For 1" vs "For 2" from user phrasing when possible; otherwise default to the first option).
+- For date/time selection, use YYYY-MM-DD format for dates and standard time format (e.g., "9:00 AM", "2:30 PM").
 - After invoking tools, interpret their results correctly: if addService returns success, do not apologize or claim failure; instead briefly confirm what was added. If it returns an error, report that error briefly.`,
           tools: {
             addService: tool({
@@ -222,6 +242,86 @@ STRICT DATA RULES:
                 };
               },
             }),
+            selectDateTime: tool({
+              description: 'Select a specific date and time for the booking',
+              inputSchema: z.object({
+                date: z.string().describe('Date for the booking (YYYY-MM-DD format)'),
+                time: z.string().describe('Time slot for the booking (e.g., "9:00 AM", "2:30 PM")'),
+              }),
+              execute: async ({ date, time }) => {
+                const { isSlotAvailable, bookDateTimeSlots } = await import('@/lib/chat/bookingStatus');
+                // Normalize inputs to match TimeSelection expectations
+                const normalizeDate = (d: string) => {
+                  const lower = String(d || '').toLowerCase().trim();
+                  const today = new Date();
+                  const format = (dt: Date) => {
+                    const y = dt.getFullYear();
+                    const m = String(dt.getMonth() + 1).padStart(2, '0');
+                    const da = String(dt.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${da}`;
+                  };
+                  if (!lower || lower === 'today') return format(today);
+                  if (lower === 'tomorrow') {
+                    const t = new Date(today);
+                    t.setDate(t.getDate() + 1);
+                    return format(t);
+                  }
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) {
+                    // If the date is in the past, snap to today
+                    const [y, m, da] = lower.split('-').map(Number);
+                    const dDate = new Date(y, (m as number) - 1, da as number);
+                    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    if (dDate < todayOnly) return format(today);
+                    return lower;
+                  }
+                  return format(today);
+                };
+                const normalizeTime = (t: string) => {
+                  const raw = String(t || '').toLowerCase().trim();
+                  // Convert common inputs to "H:MM AM/PM"
+                  // 16:00 -> 4:00 PM, 4pm -> 4:00 PM, 4:30pm -> 4:30 PM
+                  let hours = 0; let minutes = 0; let isPM = false; let isAM = false;
+                  const m1 = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+                  const m2 = raw.match(/^(\d{1,2}):(\d{2})$/);
+                  if (m1) {
+                    hours = parseInt(m1[1], 10);
+                    minutes = m1[2] ? parseInt(m1[2], 10) : 0;
+                    isPM = (m1[3] || '') === 'pm';
+                    isAM = (m1[3] || '') === 'am';
+                  } else if (m2) {
+                    hours = parseInt(m2[1], 10);
+                    minutes = parseInt(m2[2], 10);
+                  }
+                  if (!isAM && !isPM && hours >= 13) { isPM = true; hours -= 12; }
+                  if (hours === 0) hours = 12;
+                  const hh = String(hours);
+                  const mm = String(minutes).padStart(2, '0');
+                  const suffix = isPM ? 'PM' : (isAM ? 'AM' : (hours >= 9 && hours <= 11 ? 'AM' : 'PM'));
+                  return `${hh}:${mm} ${suffix}`;
+                };
+
+                const normDate = normalizeDate(date);
+                const normTime = normalizeTime(time);
+
+                // Check if slot is available
+                if (!isSlotAvailable(normDate, normTime)) {
+                  return { 
+                    success: false, 
+                    error: `Time slot ${normTime} on ${normDate} is not available` 
+                  };
+                }
+                
+                // Book the slot (assuming 30-minute duration for all services)
+                bookDateTimeSlots(normDate, normTime, 30);
+                
+                return { 
+                  success: true, 
+                  date: normDate, 
+                  time: normTime,
+                  message: `Selected ${normTime} on ${normDate} for your booking`
+                };
+              },
+            }),
             checkAvailability: tool({
               description: 'Check availability for services, professionals, or time slots',
               inputSchema: z.object({
@@ -234,23 +334,62 @@ STRICT DATA RULES:
                 const currentStatus = getBookingStatus();
                 let available = true;
                 let message = 'Available';
-                
-                if (date && time) {
+                // Apply same normalization as selectDateTime so queries match UI time/date formats
+                const normalizeDate = (d?: string) => {
+                  const today = new Date();
+                  const format = (dt: Date) => {
+                    const y = dt.getFullYear();
+                    const m = String(dt.getMonth() + 1).padStart(2, '0');
+                    const da = String(dt.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${da}`;
+                  };
+                  const lower = String(d || '').toLowerCase().trim();
+                  if (!lower || lower === 'today') return format(today);
+                  if (lower === 'tomorrow') { const t = new Date(today); t.setDate(t.getDate() + 1); return format(t); }
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) {
+                    const [y, m, da] = lower.split('-').map(Number);
+                    const dDate = new Date(y, (m as number) - 1, da as number);
+                    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    if (dDate < todayOnly) return format(today);
+                    return lower;
+                  }
+                  return format(today);
+                };
+                const normalizeTime = (t?: string) => {
+                  if (!t) return undefined as unknown as string;
+                  const raw = String(t || '').toLowerCase().trim();
+                  let hours = 0; let minutes = 0; let isPM = false; let isAM = false;
+                  const m1 = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+                  const m2 = raw.match(/^(\d{1,2}):(\d{2})$/);
+                  if (m1) { hours = parseInt(m1[1], 10); minutes = m1[2] ? parseInt(m1[2], 10) : 0; isPM = (m1[3] || '') === 'pm'; isAM = (m1[3] || '') === 'am'; }
+                  else if (m2) { hours = parseInt(m2[1], 10); minutes = parseInt(m2[2], 10); }
+                  if (!isAM && !isPM && hours >= 13) { isPM = true; hours -= 12; }
+                  if (hours === 0) hours = 12;
+                  const hh = String(hours);
+                  const mm = String(minutes).padStart(2, '0');
+                  const suffix = isPM ? 'PM' : (isAM ? 'AM' : (hours >= 9 && hours <= 11 ? 'AM' : 'PM'));
+                  return `${hh}:${mm} ${suffix}`;
+                };
+
+                const normDate = date ? normalizeDate(date) : undefined;
+                const normTime = time ? normalizeTime(time) : undefined;
+
+                if (normDate && normTime) {
                   // Check specific date and time
                   const { isSlotAvailable } = await import('@/lib/chat/bookingStatus');
-                  available = isSlotAvailable(date, time);
+                  available = isSlotAvailable(normDate, normTime);
                   message = available ? 
-                    `Time slot ${time} on ${date} is available` : 
-                    `Time slot ${time} on ${date} is not available`;
-                } else if (date) {
+                    `Time slot ${normTime} on ${normDate} is available` : 
+                    `Time slot ${normTime} on ${normDate} is not available`;
+                } else if (normDate) {
                   // Check available times for a specific date
                   const { getAvailableTimeSlotsForDate } = await import('@/lib/chat/bookingStatus');
-                  const availableTimes = getAvailableTimeSlotsForDate(date);
-                  message = `Available times for ${date}: ${availableTimes.join(', ')}`;
-                } else if (time) {
-                  const isBooked = currentStatus.bookedTimes.includes(time);
+                  const availableTimes = getAvailableTimeSlotsForDate(normDate);
+                  message = `Available times for ${normDate}: ${availableTimes.join(', ')}`;
+                } else if (normTime) {
+                  const isBooked = currentStatus.bookedTimes.includes(normTime);
                   available = !isBooked;
-                  message = isBooked ? `Time slot ${time} is not available` : `Time slot ${time} is available`;
+                  message = isBooked ? `Time slot ${normTime} is not available` : `Time slot ${normTime} is available`;
                 }
                 
                 if (professional) {

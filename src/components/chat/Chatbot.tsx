@@ -33,6 +33,11 @@ interface SelectProfessionalInput {
   professional: string;
 }
 
+interface SelectDateTimeInput {
+  date: string;
+  time: string;
+}
+
 interface CheckAvailabilityInput {
   service?: string;
   professional?: string;
@@ -47,6 +52,7 @@ export default function Chatbot() {
   const [input, setInput] = useState('');
   const [hasUnread, setHasUnread] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [isFirstOpen, setIsFirstOpen] = useState(true);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -176,6 +182,29 @@ export default function Chatbot() {
           break;
         }
 
+        case 'selectDateTime': {
+          const input = toolCall.input as SelectDateTimeInput;
+          const { date, time } = input;
+          
+          // Update service selection with the selected date and time
+          dispatch(setServiceSelection({ 
+            service: '', 
+            pkg: '', 
+            time: `${date} at ${time}` 
+          }));
+          
+          // Navigate to time selection step to show the selection
+          dispatch(setCurrentPage('services'));
+          dispatch(setStep('time'));
+          
+          addToolResult({
+            tool: 'selectDateTime',
+            toolCallId: toolCall.toolCallId,
+            output: `Selected ${time} on ${date} for your booking`
+          });
+          break;
+        }
+
         case 'checkAvailability': {
           const input = toolCall.input as CheckAvailabilityInput;
           const { service: checkService, professional: checkProf, time: checkTime, date: checkDate } = input;
@@ -228,6 +257,21 @@ export default function Chatbot() {
       }
     },
   });
+
+  // Send welcome message when chatbot is first opened
+  useEffect(() => {
+    if (open && isFirstOpen && messages.length === 0) {
+      // Send a hidden trigger message that won't be visible to the user
+      sendMessage({ 
+        text: "Hello", 
+        // Add a flag to indicate this is a system trigger
+        role: "user" as const,
+        // We'll filter this out in the UI rendering
+        isSystemTrigger: true 
+      } as any);
+      setIsFirstOpen(false);
+    }
+  }, [open, isFirstOpen, messages.length, sendMessage]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -399,6 +443,20 @@ export default function Chatbot() {
               dispatch(setSelectedProfessional(id));
               break;
             }
+            case 'selectDateTime': {
+              const date: string = part.output?.date || part.input?.date || '';
+              const time: string = part.output?.time || part.input?.time || '';
+              if (date && time) {
+                dispatch(setServiceSelection({ 
+                  service: '', 
+                  pkg: '', 
+                  time: `${date} at ${time}` 
+                }));
+                dispatch(setCurrentPage('services'));
+                dispatch(setStep('time'));
+              }
+              break;
+            }
             // checkAvailability result is UI-only here
           }
         } finally {
@@ -413,7 +471,9 @@ export default function Chatbot() {
       {/* Floating Chat Icon */}
       <motion.button
         onClick={() => {
-          if (open) setClosing(true);
+          if (open) {
+            setClosing(true);
+          }
           setOpen(v => !v);
           setHasUnread(false);
         }}
@@ -487,6 +547,11 @@ export default function Chatbot() {
                   // Track last assistant pure-text content to avoid duplicate text bubbles
                   let lastAssistantText = '';
                   return messages.map(message => {
+                    // Skip system trigger messages (welcome message triggers)
+                    if ((message as any).isSystemTrigger) {
+                      return null;
+                    }
+                    
                     const isAssistant = message.role !== 'user';
                     // Suppress tool banners only when this assistant message contains text parts
                     const hasAssistantText = isAssistant && message.parts.some(p => p.type === 'text' && !!(p as any).text);
