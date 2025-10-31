@@ -167,7 +167,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const [carouselNumDays, setCarouselNumDays] = useState(NUM_DAYS);
 
   // Generate days for the carousel based on current start date
-  const days = getDays(carouselNumDays, carouselStartDate);
+  const days = React.useMemo(() => getDays(carouselNumDays, carouselStartDate), [carouselNumDays, carouselStartDate]);
 
   // Find the index of the selected day in the carousel
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
@@ -194,13 +194,13 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   }, [selectedDayIdx, days]);
 
   useEffect(() => {
-    if (!selectedDate) return;
+    if (!selectedDate || !selectedTime) return;
     const iso = toLocalDateString(selectedDate);
     const idx = days.findIndex(d => d.iso === iso);
     if (idx !== -1 && idx !== selectedDayIdx) {
       setSelectedDayIdx(idx);
     }
-  }, [selectedDate, days, selectedDayIdx]);
+  }, [selectedDate, selectedTime, days, selectedDayIdx]);
 
   // Defensive: ensure selectedDayIdx is valid and days is not empty
   const safeSelectedDayIdx = Math.max(0, Math.min(selectedDayIdx, days.length - 1));
@@ -324,6 +324,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   function handleCalendarSelect(date?: Date) {
     if (!date) return;
     const iso = toLocalDateString(date);
+    if (setSelectedTime) setSelectedTime(null);
 
     // Get current carousel range
     const currentStart = carouselStartDate;
