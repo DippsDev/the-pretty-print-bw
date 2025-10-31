@@ -84,6 +84,15 @@ export default function Chatbot() {
     return choices[0];
   };
 
+const normalizeProfessionalKey = (name?: string) => {
+  if (!name) return 'any';
+  const trimmed = name.trim().toLowerCase();
+  if (!trimmed || trimmed === 'any professional' || trimmed === 'any') {
+    return 'any';
+  }
+  return trimmed;
+};
+
   // Use AI SDK's useChat hook
   const { messages, sendMessage, addToolResult, error } = useChat({
     transport: new DefaultChatTransport({
@@ -212,18 +221,35 @@ export default function Chatbot() {
           let message = 'Available';
           
           if (checkDate && checkTime && bookingStatus) {
-            // Check specific date and time
-            const isBooked = bookingStatus.bookedSlots[checkDate]?.includes(checkTime) || false;
+            const slotEntry = bookingStatus.bookedSlots?.[checkDate];
+            const professionalKey = normalizeProfessionalKey(checkProf);
+            const blockedAll = Array.isArray(slotEntry)
+              ? slotEntry.includes(checkTime)
+              : slotEntry?.all?.includes(checkTime) ?? false;
+            const blockedProfessional = professionalKey !== 'any'
+              ? Array.isArray(slotEntry)
+                ? false
+                : slotEntry?.byProfessional?.[professionalKey]?.includes(checkTime) ?? false
+              : false;
+            const isBooked = blockedAll || blockedProfessional;
             available = !isBooked;
             message = isBooked ? 
               `Time slot ${checkTime} on ${checkDate} is not available` : 
               `Time slot ${checkTime} on ${checkDate} is available`;
           } else if (checkDate && bookingStatus) {
-            // Check available times for a specific date
-            const availableTimes = bookingStatus.bookedSlots[checkDate] ? 
-              bookingStatus.availableTimes.filter(time => !bookingStatus.bookedSlots[checkDate].includes(time)) :
-              bookingStatus.availableTimes;
-            message = `Available times for ${checkDate}: ${availableTimes.join(', ')}`;
+            const slotEntry = bookingStatus.bookedSlots?.[checkDate];
+            const professionalKey = normalizeProfessionalKey(checkProf);
+            let availableTimes = bookingStatus.availableTimes;
+            if (slotEntry) {
+              const blocked = new Set(
+                Array.isArray(slotEntry) ? slotEntry : (slotEntry.all || [])
+              );
+              if (professionalKey !== 'any' && !Array.isArray(slotEntry)) {
+                slotEntry.byProfessional?.[professionalKey]?.forEach((slot: string) => blocked.add(slot));
+              }
+              availableTimes = bookingStatus.availableTimes.filter(time => !blocked.has(time));
+            }
+            message = `Available times for ${checkDate}${checkProf ? ` (${checkProf})` : ''}: ${availableTimes.join(', ')}`;
           } else if (checkTime && bookingStatus) {
             const isBooked = bookingStatus.bookedTimes.includes(checkTime);
             available = !isBooked;
@@ -237,6 +263,8 @@ export default function Chatbot() {
             if (!prof || !prof.available) {
               available = false;
               message = `Professional ${checkProf} is not available`;
+            } else if (checkDate && !available) {
+              message = `Professional ${checkProf} is not available at ${checkTime ?? 'the selected time'} on ${checkDate}`;
             }
           }
           

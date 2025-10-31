@@ -7,13 +7,14 @@ import type { RootState } from "@/redux/store";
 import { SERVICES } from "@/lib/servicesData";
 import ServiceModal from "../../components/modals/Service";
 import ServiceSelectionStep from "../../components/steps/ServiceSelection";
-import ProfessionalSelectionModal, { Professional } from "../../components/modals/ProfessionalSelection";
+import ProfessionalSelectionModal from "../../components/modals/ProfessionalSelection";
 import TimeSelectionModal from "../../components/steps/TimeSelection";
 import ProfessionalSelection from "../../components/steps/ProfessionalSelection";
 import ProfessionalPerServiceStep from "../../components/steps/ProfessionalPerServiceStep";
 import ProfessionalPerServiceModal from "../../components/modals/ProfessionalPerService";
 import { motion, AnimatePresence } from "framer-motion";
 import { setSelectedProfessional, setSelectedProfessionals } from "../../redux/professionalSlice";
+import { setServiceSelection, clearServiceSelection } from "@/redux/features/navigationSlice";
 import { addBooking, removeBooking } from "../../redux/serviceSlice";
 import ConfirmStep from "@/components/steps/Confirm";
 import AuthModal from "@/components/modals/Auth";
@@ -61,6 +62,7 @@ function ServicesPage() {
   const [step, setStep] = useState<'services' | 'professionals' | 'professionalPerService' | 'time' | 'confirm'>('services');
   // Listen for navigation step from Redux (for chat triggers)
   const navigationStep = useSelector((state: RootState) => state.navigation.currentStep);
+  const navigationSelectedTime = useSelector((state: RootState) => state.navigation.selectedTime);
   useEffect(() => {
     if (navigationStep && navigationStep !== step) {
       // Only set if different
@@ -79,6 +81,30 @@ function ServicesPage() {
   const [user, setUser] = useState<any>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!navigationSelectedTime) return;
+    const match = navigationSelectedTime.match(/^(\d{4}-\d{2}-\d{2})\s+at\s+(.+)$/i);
+    if (!match) return;
+    const [, datePart, timePart] = match;
+    if (!datePart || !timePart) return;
+    const [yearStr, monthStr, dayStr] = datePart.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const day = Number(dayStr);
+    if (!year || !month || !day) return;
+    const nextDate = new Date(year, month - 1, day);
+    if (Number.isNaN(nextDate.getTime())) return;
+
+    setSelectedDate(nextDate);
+    setSelectedTime(timePart);
+  }, [navigationSelectedTime]);
+
+  useEffect(() => {
+    if (!selectedDate && !selectedTime) {
+      dispatch(clearServiceSelection());
+    }
+  }, [selectedDate, selectedTime, dispatch]);
 
   // Check user session on mount and after login
   React.useEffect(() => {
@@ -286,6 +312,7 @@ function ServicesPage() {
   function handleTimeSelection({ date, time }: { date: string; time: string }) {
     setSelectedDate(new Date(date));
     setSelectedTime(time);
+    dispatch(setServiceSelection({ service: '', pkg: '', time: `${date} at ${time}` }));
     // Do NOT open auth modal here anymore
   }
 
@@ -550,10 +577,6 @@ function ServicesPage() {
                   <TimeSelectionModal
                     onBack={() => { setProfessionalMode('single'); setStep('professionals'); }}
                     onContinue={handleTimeSelection}
-                    availableTimes={{
-                      [new Date().toISOString().slice(0,10)]: ["09:00", "10:00", "11:00", "14:00"],
-                      [(() => { const d = new Date(); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); })()]: ["10:00", "13:00", "15:00"]
-                    }}
                     onOpenProfessionalModal={() => handleOpenProfessionalModal()}
                     professionalMode={professionalMode}
                     bookings={bookings}

@@ -33,25 +33,65 @@ export function useBookingUpdates() {
 }
 
 // Hook for booking time slots
+interface BookingActionPayload {
+  date: string;
+  time: string;
+  duration?: number;
+  professional?: string;
+}
+
 export function useBookingActions() {
-  const bookTimeSlot = async (time: string, duration: number, professional?: string) => {
+  const dispatch = useDispatch();
+
+  const bookSlot = async ({ date, time, duration = 30, professional }: BookingActionPayload) => {
     try {
       const response = await fetch('/api/chat/updates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ time, duration, professional }),
+        body: JSON.stringify({ date, time, duration, professional }),
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to book time slot');
+
+      const result = await response.json();
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to book time slot');
       }
-      
-      return await response.json();
+
+      if (result.status) {
+        dispatch(updateBookingStatus(result.status));
+      }
+
+      return result;
     } catch (error) {
       console.error('Booking error:', error);
       throw error;
     }
   };
 
-  return { bookTimeSlot };
+  const cancelSlot = async ({ date, time, duration = 30, professional }: BookingActionPayload) => {
+    try {
+      const response = await fetch('/api/chat/updates', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date, time, duration, professional }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to cancel time slot');
+      }
+
+      if (result.status) {
+        dispatch(updateBookingStatus(result.status));
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Cancel booking error:', error);
+      throw error;
+    }
+  };
+
+  return { bookSlot, cancelSlot };
 }

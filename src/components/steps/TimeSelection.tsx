@@ -4,6 +4,7 @@ import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/redux/store";
+import { useBookingActions } from "@/hooks/useBookingUpdates";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
@@ -25,20 +26,48 @@ function getDays(numDays = 90, startDate?: Date) {
   return days;
 }
 
+const TIME_SLOTS: string[] = [
+  "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
+  "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
+  "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM"
+];
+
+type BookedSlotsMap = {
+  [date: string]:
+    | string[]
+    | {
+        all: string[];
+        byProfessional: {
+          [professional: string]: string[];
+        };
+      };
+};
+
+const DEFAULT_SLOT_DURATION = 30;
+
 // Generate available times for every day from today, 9am-5pm, 30-minute slots
-function generateAvailableTimes(numDays = 90, startDate?: Date, bookedSlots?: { [date: string]: string[] }) {
+function generateAvailableTimes(
+  numDays = 90,
+  startDate?: Date,
+  bookedSlots?: BookedSlotsMap,
+  timeSlots: string[] = TIME_SLOTS
+) {
   const days = getDays(numDays, startDate);
-  const times: string[] = [
-    "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
-    "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-    "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM"
-  ];
-  
+  const times = timeSlots.length ? timeSlots : TIME_SLOTS;
+
   const availableTimes: { [iso: string]: string[] } = {};
   days.forEach(day => {
     // If there are booked slots for this date, filter them out
     if (bookedSlots && bookedSlots[day.iso]) {
-      availableTimes[day.iso] = times.filter(time => !bookedSlots[day.iso].includes(time));
+      const entry = bookedSlots[day.iso];
+      if (Array.isArray(entry)) {
+        availableTimes[day.iso] = times.filter(time => !entry.includes(time));
+      } else if (entry) {
+        const blocked = new Set(entry.all || []);
+        availableTimes[day.iso] = times.filter(time => !blocked.has(time));
+      } else {
+        availableTimes[day.iso] = [...times];
+      }
     } else {
       // All times available if no bookings for this date
       availableTimes[day.iso] = [...times];
@@ -52,6 +81,20 @@ function toLocalDateString(date: Date) {
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function fromIsoDate(iso: string) {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
+}
+
+function normalizeProfessionalKey(name?: string | null) {
+  if (!name) return 'any';
+  const trimmed = name.trim().toLowerCase();
+  if (!trimmed || trimmed === 'any professional' || trimmed === 'any') {
+    return 'any';
+  }
+  return trimmed;
 }
 
 const NUM_DAYS = 90;
@@ -94,14 +137,31 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
 }) => {
   // Get booking status from Redux
   const bookingStatus = useSelector((state: RootState) => state.bookingStatus.status);
-  
-  // Generate available times based on real-time booking data
+
+  const baseTimeSlots = React.useMemo(() => {
+    if (bookingStatus?.availableTimes?.length) {
+      return bookingStatus.availableTimes;
+    }
+    return TIME_SLOTS;
+  }, [bookingStatus?.availableTimes]);
+
+  const { bookSlot, cancelSlot } = useBookingActions();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const realTimeAvailableTimes = React.useMemo(() => {
-    return generateAvailableTimes(NUM_DAYS, CALENDAR_START, bookingStatus?.bookedSlots);
-  }, [bookingStatus?.bookedSlots]);
-  
-  // Use real-time data if available, otherwise fall back to prop
-  const effectiveAvailableTimes = availableTimes || realTimeAvailableTimes;
+    return generateAvailableTimes(
+      NUM_DAYS,
+      CALENDAR_START,
+      bookingStatus?.bookedSlots,
+      baseTimeSlots
+    );
+  }, [bookingStatus?.bookedSlots, baseTimeSlots]);
+
+  const effectiveAvailableTimes = React.useMemo(() => {
+    return availableTimes || realTimeAvailableTimes;
+  }, [availableTimes, realTimeAvailableTimes]);
   // Track the start date and number of days for the carousel range
   const [carouselStartDate, setCarouselStartDate] = useState<Date>(CALENDAR_START);
   const [carouselNumDays, setCarouselNumDays] = useState(NUM_DAYS);
@@ -116,6 +176,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     return `${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`;
   });
   const tabListRef = useRef<HTMLUListElement>(null);
+  const lastBookedRef = useRef<{ date: string; time: string; professional?: string } | null>(null);
 
   // Calendar modal state
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -123,7 +184,6 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
 
   useEffect(() => {
     setSelectedDayIdx(0);
-    if (setSelectedTime) setSelectedTime(null);
   }, [carouselStartDate, carouselNumDays]);
 
   // Update visibleMonthYear when selectedDayIdx changes
@@ -133,10 +193,86 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     setVisibleMonthYear(`${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`);
   }, [selectedDayIdx, days]);
 
+  useEffect(() => {
+    if (!selectedDate) return;
+    const iso = toLocalDateString(selectedDate);
+    const idx = days.findIndex(d => d.iso === iso);
+    if (idx !== -1 && idx !== selectedDayIdx) {
+      setSelectedDayIdx(idx);
+    }
+  }, [selectedDate, days, selectedDayIdx]);
+
   // Defensive: ensure selectedDayIdx is valid and days is not empty
   const safeSelectedDayIdx = Math.max(0, Math.min(selectedDayIdx, days.length - 1));
   const selectedDay = days[safeSelectedDayIdx] ?? days[0];
-  const times = selectedDay ? (effectiveAvailableTimes[selectedDay.iso] || []) : [];
+  const selectedDayIso = selectedDay?.iso;
+  const selectedDateIso = selectedDate ? toLocalDateString(selectedDate) : null;
+  const availableTimesForSelectedDay = selectedDay
+    ? (effectiveAvailableTimes[selectedDay.iso] || [])
+    : [];
+
+  const professionalForApi = React.useMemo(() => {
+    if (professionalMode === 'perService') {
+      if (bookings && bookings.length === 1 && selectedProfessionals) {
+        const id = selectedProfessionals[0];
+        const name = getProfessionalName(id);
+        return name === "Any professional" ? undefined : name;
+      }
+      return undefined;
+    }
+    const name = getProfessionalName(selectedProfessional);
+    return name === "Any professional" ? undefined : name;
+  }, [professionalMode, bookings, selectedProfessionals, selectedProfessional]);
+
+  const professionalKey = React.useMemo(
+    () => normalizeProfessionalKey(professionalForApi ?? null),
+    [professionalForApi]
+  );
+
+  const times = React.useMemo(() => {
+    if (!selectedDayIso) return [] as string[];
+    let filtered = [...availableTimesForSelectedDay];
+
+    if (professionalKey !== 'any') {
+      const entry = bookingStatus?.bookedSlots?.[selectedDayIso];
+      const blocked = entry?.byProfessional?.[professionalKey] || [];
+      if (blocked.length) {
+        const blockedSet = new Set(blocked);
+        filtered = filtered.filter(slot => !blockedSet.has(slot));
+      }
+    }
+
+    if (
+      selectedDateIso === selectedDayIso &&
+      selectedTime &&
+      !filtered.includes(selectedTime)
+    ) {
+      filtered.push(selectedTime);
+    }
+
+    const unique = Array.from(new Set(filtered));
+    unique.sort((a, b) => {
+      const aIdx = baseTimeSlots.indexOf(a);
+      const bIdx = baseTimeSlots.indexOf(b);
+      return (aIdx === -1 ? Number.POSITIVE_INFINITY : aIdx) -
+        (bIdx === -1 ? Number.POSITIVE_INFINITY : bIdx);
+    });
+    return unique;
+  }, [
+    availableTimesForSelectedDay,
+    selectedDayIso,
+    selectedDateIso,
+    selectedTime,
+    baseTimeSlots,
+    professionalKey,
+    bookingStatus?.bookedSlots,
+  ]);
+
+  useEffect(() => {
+    if (!selectedDate || !selectedTime) {
+      lastBookedRef.current = null;
+    }
+  }, [selectedDate, selectedTime]);
 
   // Call onContinue as soon as a time is selected (prevent infinite loop)
   const lastSentRef = useRef<{ date: string; time: string } | null>(null);
@@ -245,6 +381,127 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     if (idx !== -1) {
       setSelectedDayIdx(idx);
       setCalendarOpen(false);
+    }
+  }
+
+  async function handleTimeClick(timeValue: string) {
+    if (!selectedDay || !selectedDayIso || isProcessing) return;
+
+    setActionMessage(null);
+    setActionError(null);
+    setIsProcessing(true);
+
+    const previousBooking = lastBookedRef.current;
+    const isSameSelection =
+      previousBooking?.date === selectedDayIso &&
+      previousBooking?.time === timeValue;
+
+    const displayDate = new Date(selectedDay.date);
+    const formattedDate = displayDate.toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    if (isSameSelection && previousBooking) {
+      try {
+        await cancelSlot({
+          date: previousBooking.date,
+          time: previousBooking.time,
+          duration: DEFAULT_SLOT_DURATION,
+          professional: previousBooking.professional,
+        });
+        setSelectedTime?.(null);
+        setSelectedDate?.(null);
+        lastBookedRef.current = null;
+        setActionMessage(`Released ${timeValue} on ${formattedDate}`);
+      } catch (error) {
+        console.error('Failed to release time slot', error);
+        const message = error instanceof Error
+          ? error.message
+          : 'Failed to release time slot. Please try again.';
+        setActionError(message);
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
+    try {
+      const bookingPayload = {
+        date: selectedDayIso,
+        time: timeValue,
+        duration: DEFAULT_SLOT_DURATION,
+        professional: professionalForApi,
+      };
+
+      await bookSlot(bookingPayload);
+
+      let releaseError: string | null = null;
+      if (previousBooking) {
+        try {
+          await cancelSlot({
+            ...previousBooking,
+            duration: DEFAULT_SLOT_DURATION,
+          });
+        } catch (error) {
+          console.error('Failed to release previous slot', error);
+          releaseError = 'Previous time slot is still reserved. Please cancel it manually if needed.';
+        }
+      }
+
+      setSelectedDate?.(new Date(selectedDay.date));
+      setSelectedTime?.(timeValue);
+      lastBookedRef.current = bookingPayload;
+
+      setActionMessage(`Reserved ${timeValue} on ${formattedDate}`);
+      if (releaseError) {
+        setActionError(releaseError);
+      }
+    } catch (error) {
+      console.error('Booking action failed', error);
+      const message = error instanceof Error
+        ? error.message
+        : 'Failed to reserve time slot. Please try again.';
+      setActionError(message);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  async function handleCancelSelected() {
+    const currentBooking = lastBookedRef.current;
+    if (!currentBooking || isProcessing) return;
+
+    setActionMessage(null);
+    setActionError(null);
+    setIsProcessing(true);
+
+    const displayDate = fromIsoDate(currentBooking.date).toLocaleDateString(undefined, {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    try {
+      await cancelSlot({
+        date: currentBooking.date,
+        time: currentBooking.time,
+        duration: DEFAULT_SLOT_DURATION,
+        professional: currentBooking.professional,
+      });
+      setSelectedTime?.(null);
+      setSelectedDate?.(null);
+      lastBookedRef.current = null;
+      setActionMessage(`Released ${currentBooking.time} on ${displayDate}`);
+    } catch (error) {
+      console.error('Failed to release time slot', error);
+      const message = error instanceof Error
+        ? error.message
+        : 'Failed to release time slot. Please try again.';
+      setActionError(message);
+    } finally {
+      setIsProcessing(false);
     }
   }
 
@@ -489,17 +746,30 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
         {/* Time slots or not available */}
         {times.length > 0 ? (
           <div className="flex flex-wrap gap-3 mb-8">
-            {times.map((t) => (
-              <button
-                key={t}
-                className={`px-4 py-2 rounded-full border font-medium transition-colors ${selectedTime === t ? "bg-[#141414] text-white border-[#141414]" : "bg-white text-[#141414] border-[#d1d5db] hover:border-[#33383C]"}`}
-                onClick={() => {
-                  if (setSelectedTime) setSelectedTime(t);
-                }}
-              >
-                {t}
-              </button>
-            ))}
+            {times.map((t) => {
+              const isSelected = selectedDateIso === selectedDayIso && selectedTime === t;
+              const isBookable = availableTimesForSelectedDay.includes(t);
+              const isDisabled = (!isBookable && !isSelected) || (isProcessing && !isSelected);
+              const label = !isBookable && isSelected ? `${t} (reserved)` : t;
+              const baseClasses = "px-4 py-2 rounded-full border font-medium transition-colors";
+              const stateClasses = isSelected
+                ? "bg-[#141414] text-white border-[#141414]"
+                : isBookable
+                  ? "bg-white text-[#141414] border-[#d1d5db] hover:border-[#33383C]"
+                  : "bg-[#f5f5f5] text-[#9ca3af] border-[#e5e7eb]";
+              const disabledClasses = isDisabled ? " opacity-70 cursor-not-allowed" : "";
+
+              return (
+                <button
+                  key={t}
+                  className={`${baseClasses} ${stateClasses}${disabledClasses}`}
+                  onClick={() => handleTimeClick(t)}
+                  disabled={isDisabled}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full" style={{ alignSelf: 'center' }}>
@@ -513,6 +783,36 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               }}>Go to next available date</button>
               <button className="px-4 py-2 rounded-full border font-medium text-[#33383C] hover:bg-gray-100">Join waitlist</button>
             </div>
+          </div>
+        )}
+        {(selectedDate && selectedTime) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-[#f9fafb] border border-[#ededed] rounded-xl px-4 py-3">
+            <div className="flex flex-col text-sm text-[#33383C]">
+              <span className="font-semibold text-[#141414]">Selected slot</span>
+              <span>
+                {selectedDate.toLocaleDateString(undefined, {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+                {selectedTime ? ` at ${selectedTime}` : ''}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-full border font-medium text-[#d32f2f] border-[#f5c7c7] hover:bg-[#fef2f2] transition"
+              onClick={handleCancelSelected}
+              disabled={isProcessing}
+            >
+              Cancel slot
+            </button>
+          </div>
+        )}
+        {(isProcessing || actionMessage || actionError) && (
+          <div className="mb-6 text-sm space-y-1">
+            {isProcessing && <div className="text-[#33383C]">Updating slot...</div>}
+            {actionMessage && <div className="text-[#047857]">{actionMessage}</div>}
+            {actionError && <div className="text-[#b91c1c]">{actionError}</div>}
           </div>
         )}
         {/* Footer actions */}

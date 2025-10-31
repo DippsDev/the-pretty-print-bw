@@ -3,7 +3,12 @@ export interface BookingStatus {
   availableTimes: string[];
   bookedTimes: string[];
   bookedSlots: {
-    [date: string]: string[]; // Date in YYYY-MM-DD format, array of time slots
+    [date: string]: {
+      all: string[];
+      byProfessional: {
+        [professional: string]: string[];
+      };
+    };
   };
   professionals: {
     name: string;
@@ -27,9 +32,28 @@ let bookingStatus: BookingStatus = {
   ]
 };
 
+function normalizeProfessional(professional?: string): string {
+  if (!professional) return 'any';
+  const trimmed = professional.trim().toLowerCase();
+  if (!trimmed || trimmed === 'any professional' || trimmed === 'any') {
+    return 'any';
+  }
+  return trimmed;
+}
+
+function ensureDateEntry(date: string) {
+  if (!bookingStatus.bookedSlots[date]) {
+    bookingStatus.bookedSlots[date] = {
+      all: [],
+      byProfessional: {},
+    };
+  }
+  return bookingStatus.bookedSlots[date];
+}
+
 // Get current booking status
 export function getBookingStatus(): BookingStatus {
-  return { ...bookingStatus };
+  return JSON.parse(JSON.stringify(bookingStatus)) as BookingStatus;
 }
 
 // Book a time slot
@@ -97,7 +121,7 @@ export function bookServiceTimeSlots(startTime: string, duration: number): boole
 }
 
 // Book time slots for a specific date
-export function bookDateTimeSlots(date: string, startTime: string, duration: number): boolean {
+export function bookDateTimeSlots(date: string, startTime: string, duration: number, professional?: string): boolean {
   const timeSlots = bookingStatus.availableTimes;
   const startIndex = timeSlots.indexOf(startTime);
   
@@ -115,52 +139,91 @@ export function bookDateTimeSlots(date: string, startTime: string, duration: num
   
   // Get required slots
   const requiredSlots = timeSlots.slice(startIndex, endIndex);
-  
-  // Initialize date if not exists
-  if (!bookingStatus.bookedSlots[date]) {
-    bookingStatus.bookedSlots[date] = [];
-  }
-  
-  // Check if any required slots are already booked for this date
-  const unavailableSlots = requiredSlots.filter(slot => 
-    bookingStatus.bookedSlots[date].includes(slot)
-  );
-  
-  if (unavailableSlots.length > 0) {
-    return false; // Some slots are already booked for this date
-  }
-  
-  // Book all required slots for this date
-  requiredSlots.forEach(slot => {
-    if (!bookingStatus.bookedSlots[date].includes(slot)) {
-      bookingStatus.bookedSlots[date].push(slot);
+
+  const professionalKey = normalizeProfessional(professional);
+  const entry = ensureDateEntry(date);
+
+  const isSlotTaken = requiredSlots.some(slot => {
+    if (entry.all.includes(slot)) {
+      return true;
     }
+    if (professionalKey !== 'any') {
+      const bucket = entry.byProfessional[professionalKey];
+      if (bucket && bucket.includes(slot)) {
+        return true;
+      }
+    }
+    return false;
   });
-  
+
+  if (isSlotTaken) {
+    return false;
+  }
+
+  if (professionalKey === 'any') {
+    requiredSlots.forEach(slot => {
+      if (!entry.all.includes(slot)) {
+        entry.all.push(slot);
+      }
+    });
+  } else {
+    if (!entry.byProfessional[professionalKey]) {
+      entry.byProfessional[professionalKey] = [];
+    }
+    const bucket = entry.byProfessional[professionalKey];
+    requiredSlots.forEach(slot => {
+      if (!bucket.includes(slot)) {
+        bucket.push(slot);
+      }
+    });
+  }
+
   return true;
 }
 
 // Check if a specific date and time slot is available
-export function isSlotAvailable(date: string, time: string): boolean {
-  if (!bookingStatus.bookedSlots[date]) {
+export function isSlotAvailable(date: string, time: string, professional?: string): boolean {
+  const entry = bookingStatus.bookedSlots[date];
+  if (!entry) {
     return true; // Date has no bookings
   }
-  return !bookingStatus.bookedSlots[date].includes(time);
+
+  if (entry.all.includes(time)) {
+    return false;
+  }
+
+  const professionalKey = normalizeProfessional(professional);
+  if (professionalKey === 'any') {
+    return true;
+  }
+
+  const bucket = entry.byProfessional[professionalKey];
+  return !(bucket && bucket.includes(time));
 }
 
 // Get available time slots for a specific date
-export function getAvailableTimeSlotsForDate(date: string): string[] {
-  if (!bookingStatus.bookedSlots[date]) {
+export function getAvailableTimeSlotsForDate(date: string, professional?: string): string[] {
+  const entry = bookingStatus.bookedSlots[date];
+  if (!entry) {
     return [...bookingStatus.availableTimes]; // All times available
   }
-  return bookingStatus.availableTimes.filter(time => 
-    !bookingStatus.bookedSlots[date].includes(time)
-  );
+
+  const blocked = new Set(entry.all);
+  const professionalKey = normalizeProfessional(professional);
+  if (professionalKey !== 'any') {
+    const bucket = entry.byProfessional[professionalKey];
+    if (bucket) {
+      bucket.forEach(slot => blocked.add(slot));
+    }
+  }
+
+  return bookingStatus.availableTimes.filter(time => !blocked.has(time));
 }
 
 // Release time slots for a specific date
-export function releaseDateTimeSlots(date: string, startTime: string, duration: number): boolean {
-  if (!bookingStatus.bookedSlots[date]) {
+export function releaseDateTimeSlots(date: string, startTime: string, duration: number, professional?: string): boolean {
+  const entry = bookingStatus.bookedSlots[date];
+  if (!entry) {
     return false; // No bookings for this date
   }
   
@@ -175,19 +238,30 @@ export function releaseDateTimeSlots(date: string, startTime: string, duration: 
   const endIndex = startIndex + slotsNeeded;
   const requiredSlots = timeSlots.slice(startIndex, endIndex);
   
-  // Remove slots from booked slots for this date
-  requiredSlots.forEach(slot => {
-    const index = bookingStatus.bookedSlots[date].indexOf(slot);
-    if (index !== -1) {
-      bookingStatus.bookedSlots[date].splice(index, 1);
+  const professionalKey = normalizeProfessional(professional);
+
+  const removeFromArray = (arr: string[]) => {
+    requiredSlots.forEach(slot => {
+      const idx = arr.indexOf(slot);
+      if (idx !== -1) {
+        arr.splice(idx, 1);
+      }
+    });
+  };
+
+  if (professionalKey === 'any') {
+    removeFromArray(entry.all);
+  } else if (entry.byProfessional[professionalKey]) {
+    removeFromArray(entry.byProfessional[professionalKey]);
+    if (entry.byProfessional[professionalKey].length === 0) {
+      delete entry.byProfessional[professionalKey];
     }
-  });
-  
-  // Clean up empty date entries
-  if (bookingStatus.bookedSlots[date].length === 0) {
+  }
+
+  if (entry.all.length === 0 && Object.keys(entry.byProfessional).length === 0) {
     delete bookingStatus.bookedSlots[date];
   }
-  
+
   return true;
 }
 

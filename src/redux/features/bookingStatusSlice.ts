@@ -4,7 +4,12 @@ export interface BookingStatus {
   availableTimes: string[];
   bookedTimes: string[];
   bookedSlots: {
-    [date: string]: string[]; // Date in YYYY-MM-DD format, array of time slots
+    [date: string]: {
+      all: string[];
+      byProfessional: {
+        [professional: string]: string[];
+      };
+    };
   };
   professionals: {
     name: string;

@@ -377,15 +377,15 @@ STRICT DATA RULES:
                 if (normDate && normTime) {
                   // Check specific date and time
                   const { isSlotAvailable } = await import('@/lib/chat/bookingStatus');
-                  available = isSlotAvailable(normDate, normTime);
+                  available = isSlotAvailable(normDate, normTime, professional);
                   message = available ? 
-                    `Time slot ${normTime} on ${normDate} is available` : 
-                    `Time slot ${normTime} on ${normDate} is not available`;
+                    `Time slot ${normTime} on ${normDate} is available${professional ? ` for ${professional}` : ''}` : 
+                    `Time slot ${normTime} on ${normDate} is not available${professional ? ` for ${professional}` : ''}`;
                 } else if (normDate) {
                   // Check available times for a specific date
                   const { getAvailableTimeSlotsForDate } = await import('@/lib/chat/bookingStatus');
-                  const availableTimes = getAvailableTimeSlotsForDate(normDate);
-                  message = `Available times for ${normDate}: ${availableTimes.join(', ')}`;
+                  const availableTimes = getAvailableTimeSlotsForDate(normDate, professional);
+                  message = `Available times for ${normDate}${professional ? ` (${professional})` : ''}: ${availableTimes.join(', ')}`;
                 } else if (normTime) {
                   const isBooked = currentStatus.bookedTimes.includes(normTime);
                   available = !isBooked;
@@ -406,8 +406,8 @@ STRICT DATA RULES:
                   success: true, 
                   available,
                   message,
-                  availableTimes: date ? 
-                    (await import('@/lib/chat/bookingStatus')).getAvailableTimeSlotsForDate(date) :
+                  availableTimes: normDate ? 
+                    (await import('@/lib/chat/bookingStatus')).getAvailableTimeSlotsForDate(normDate, professional) :
                     currentStatus.availableTimes.filter(t => !currentStatus.bookedTimes.includes(t))
                 };
               },

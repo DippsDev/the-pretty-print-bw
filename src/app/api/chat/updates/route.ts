@@ -57,13 +57,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Import booking functions
-    const { bookServiceTimeSlots, bookDateTimeSlots, setProfessionalAvailability } = await import('@/lib/chat/bookingStatus');
+    const { bookServiceTimeSlots, bookDateTimeSlots } = await import('@/lib/chat/bookingStatus');
     
     let success: boolean;
     
     if (date) {
       // Book for specific date
-      success = bookDateTimeSlots(date, time, duration || 30);
+      success = bookDateTimeSlots(date, time, duration || 30, professional);
     } else {
       // Book general time slot (legacy)
       success = bookServiceTimeSlots(time, duration || 30);
@@ -74,15 +74,50 @@ export async function POST(request: NextRequest) {
     }
 
     // Set professional as unavailable if specified
-    if (professional) {
-      setProfessionalAvailability(professional, false);
-    }
+    const updatedStatus = getBookingStatus();
 
     return Response.json({ 
       success: true, 
+      status: updatedStatus,
       message: date ? 
         `Time slot ${time} on ${date} booked successfully` : 
         'Time slot booked successfully' 
+    });
+  } catch (error) {
+    return Response.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { time, duration, professional, date } = await request.json();
+
+    if (!time) {
+      return Response.json({ error: 'Time is required' }, { status: 400 });
+    }
+
+    const { releaseTimeSlot, releaseDateTimeSlots } = await import('@/lib/chat/bookingStatus');
+
+    let success: boolean;
+
+    if (date) {
+      success = releaseDateTimeSlots(date, time, duration || 30, professional);
+    } else {
+      success = releaseTimeSlot(time);
+    }
+
+    if (!success) {
+      return Response.json({ error: 'Time slot could not be released' }, { status: 404 });
+    }
+
+    const updatedStatus = getBookingStatus();
+
+    return Response.json({
+      success: true,
+      status: updatedStatus,
+      message: date ?
+        `Time slot ${time} on ${date} released successfully` :
+        'Time slot released successfully'
     });
   } catch (error) {
     return Response.json({ error: 'Internal server error' }, { status: 500 });
