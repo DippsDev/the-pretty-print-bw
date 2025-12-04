@@ -7,8 +7,9 @@ const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 export type ServiceOption = {
   name: string;
   description?: string;
-  price: string | { [time: string]: string } | Array<{ label: string; value: string }>;
+  price: string | { [time: string]: string } | Array<{ label: string; value: string; slug?: string }>;
   duration?: string;
+  slug?: string;
   packages?: {
     name: string;
     description?: string;
@@ -21,12 +22,14 @@ interface ServiceModalProps {
   onClose: () => void;
   service: {
     name: string;
+    slug?: string;
     description?: string;
     options: ServiceOption[];
     basePrice?: string;
     baseDuration?: string;
     note?: string;
     timeOptions?: string[];
+    durationMinutes?: number;
     packages?: {
       name: string;
       description?: string;
@@ -38,6 +41,10 @@ interface ServiceModalProps {
     option: string;
     time: string;
     price: string;
+    metadata?: {
+      serviceSlug?: string;
+      durationMinutes?: number;
+    };
   }) => void;
 }
 
@@ -52,7 +59,7 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
 
   let option = service.options[0];
   let price = "";
-  let priceOptions: Array<{ label: string; value: string }> = [];
+  let priceOptions: Array<{ label: string; value: string; slug?: string }> = [];
   const timeOptions = service.timeOptions || [];
   const showTime = timeOptions.length === 1;
   const timeText = showTime ? timeOptions[0] : "";
@@ -202,6 +209,12 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
                       option: bookingOption,
                       time: timeText,
                       price: bookingPrice,
+                      metadata: {
+                        serviceSlug: isPackageGroup
+                          ? priceOptions[selectedOption]?.slug || priceOptions[0]?.slug || service.slug || option.slug
+                          : service.slug || option.slug,
+                        durationMinutes: service.durationMinutes,
+                      },
                     });
                     onClose();
                   }

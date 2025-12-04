@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { Inter_Tight } from "next/font/google";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
-import { useSelector } from "react-redux";
-import type { RootState } from "@/redux/store";
-import { useBookingActions } from "@/hooks/useBookingUpdates";
+import { getCalcomEventInfo, resolveProfessionalKey } from "@/lib/calcom/events";
+import { resolveServiceSlugFromBooking } from "@/lib/calcom/helpers";
+import type { Booking } from "@/redux/serviceSlice";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
@@ -26,56 +26,6 @@ function getDays(numDays = 90, startDate?: Date) {
   return days;
 }
 
-const TIME_SLOTS: string[] = [
-  "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM",
-  "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-  "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM"
-];
-
-type BookedSlotsMap = {
-  [date: string]:
-    | string[]
-    | {
-        all: string[];
-        byProfessional: {
-          [professional: string]: string[];
-        };
-      };
-};
-
-const DEFAULT_SLOT_DURATION = 30;
-
-// Generate available times for every day from today, 9am-5pm, 30-minute slots
-function generateAvailableTimes(
-  numDays = 90,
-  startDate?: Date,
-  bookedSlots?: BookedSlotsMap,
-  timeSlots: string[] = TIME_SLOTS
-) {
-  const days = getDays(numDays, startDate);
-  const times = timeSlots.length ? timeSlots : TIME_SLOTS;
-
-  const availableTimes: { [iso: string]: string[] } = {};
-  days.forEach(day => {
-    // If there are booked slots for this date, filter them out
-    if (bookedSlots && bookedSlots[day.iso]) {
-      const entry = bookedSlots[day.iso];
-      if (Array.isArray(entry)) {
-        availableTimes[day.iso] = times.filter(time => !entry.includes(time));
-      } else if (entry) {
-        const blocked = new Set(entry.all || []);
-        availableTimes[day.iso] = times.filter(time => !blocked.has(time));
-      } else {
-        availableTimes[day.iso] = [...times];
-      }
-    } else {
-      // All times available if no bookings for this date
-      availableTimes[day.iso] = [...times];
-    }
-  });
-  return availableTimes;
-}
-
 function toLocalDateString(date: Date) {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -83,23 +33,26 @@ function toLocalDateString(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function fromIsoDate(iso: string) {
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, (month ?? 1) - 1, day ?? 1);
-}
-
-function normalizeProfessionalKey(name?: string | null) {
-  if (!name) return 'any';
-  const trimmed = name.trim().toLowerCase();
-  if (!trimmed || trimmed === 'any professional' || trimmed === 'any') {
-    return 'any';
-  }
-  return trimmed;
-}
-
 const NUM_DAYS = 90;
 const MAX_DAYS = 90; // Maximum days to render in carousel at any time
 const CALENDAR_START = new Date();
+
+function timeLabelToMinutes(label: string): number {
+  const match = label.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const [, hourStr, minuteStr, period] = match;
+  let hours = parseInt(hourStr, 10);
+  const minutes = parseInt(minuteStr, 10);
+  const upperPeriod = period.toUpperCase();
+  if (upperPeriod === 'PM' && hours !== 12) {
+    hours += 12;
+  } else if (upperPeriod === 'AM' && hours === 12) {
+    hours = 0;
+  }
+  return hours * 60 + minutes;
+}
 
 interface TimeSelectionModalProps {
   onBack: () => void;
@@ -107,12 +60,9 @@ interface TimeSelectionModalProps {
   availableTimes?: { [isoDate: string]: string[] };
   onOpenProfessionalModal?: () => void;
   professionalMode?: 'single' | 'perService';
-  bookings?: any[];
+  bookings?: Booking[];
   selectedProfessionals?: { [bookingIdx: number]: number | undefined };
-  setSelectedProfessionals?: (bookingIdx: number, id: number | undefined) => void;
   selectedProfessional?: number;
-  // New props for user and controlled date/time
-  user?: any;
   selectedDate?: Date | null;
   selectedTime?: string | null;
   setSelectedDate?: (d: Date | null) => void;
@@ -127,41 +77,109 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   professionalMode = 'single',
   bookings,
   selectedProfessionals,
-  setSelectedProfessionals,
   selectedProfessional,
-  user,
   selectedDate,
   selectedTime,
   setSelectedDate,
   setSelectedTime,
 }) => {
-  // Get booking status from Redux
-  const bookingStatus = useSelector((state: RootState) => state.bookingStatus.status);
+  const tabListRef = useRef<HTMLUListElement>(null);
+  const calendarIconRef = useRef<HTMLButtonElement>(null);
 
-  const baseTimeSlots = React.useMemo(() => {
-    if (bookingStatus?.availableTimes?.length) {
-      return bookingStatus.availableTimes;
+  const [availability, setAvailability] = useState<Record<string, string[]>>({});
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+
+  const primaryBooking = bookings && bookings.length > 0 ? bookings[0] : undefined;
+  const serviceSlug = React.useMemo(
+    () => resolveServiceSlugFromBooking(primaryBooking),
+    [primaryBooking]
+  );
+  const eventInfo = React.useMemo(
+    () => getCalcomEventInfo(serviceSlug),
+    [serviceSlug]
+  );
+
+  const selectedProfessionalId = React.useMemo(() => {
+    if (professionalMode === 'perService' && bookings && bookings.length > 0 && selectedProfessionals) {
+      for (let idx = 0; idx < bookings.length; idx += 1) {
+        const professionalId = selectedProfessionals[idx];
+        if (typeof professionalId === 'number') {
+          return professionalId;
+        }
+      }
     }
-    return TIME_SLOTS;
-  }, [bookingStatus?.availableTimes]);
+    return selectedProfessional;
+  }, [professionalMode, bookings, selectedProfessionals, selectedProfessional]);
 
-  const { bookSlot, cancelSlot } = useBookingActions();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const professionalKey = React.useMemo(
+    () => resolveProfessionalKey(selectedProfessionalId),
+    [selectedProfessionalId]
+  );
 
-  const realTimeAvailableTimes = React.useMemo(() => {
-    return generateAvailableTimes(
-      NUM_DAYS,
-      CALENDAR_START,
-      bookingStatus?.bookedSlots,
-      baseTimeSlots
-    );
-  }, [bookingStatus?.bookedSlots, baseTimeSlots]);
+  const eventTypeId = React.useMemo(() => {
+    if (!eventInfo) return undefined;
+    return eventInfo.eventTypeIds?.[professionalKey];
+  }, [eventInfo, professionalKey]);
 
-  const effectiveAvailableTimes = React.useMemo(() => {
-    return availableTimes || realTimeAvailableTimes;
-  }, [availableTimes, realTimeAvailableTimes]);
+  const shouldShowMissingEventType = Boolean(primaryBooking) && !availabilityLoading && !eventTypeId;
+
+  useEffect(() => {
+    if (!eventTypeId) {
+      setAvailability({});
+      return;
+    }
+
+    const controller = new AbortController();
+    const start = new Date();
+    const end = new Date();
+    end.setDate(end.getDate() + NUM_DAYS);
+
+    const params = new URLSearchParams({
+      eventTypeId: String(eventTypeId),
+      start: start.toISOString(),
+      end: end.toISOString(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+
+    async function loadAvailability() {
+      setAvailabilityLoading(true);
+      setAvailabilityError(null);
+
+      try {
+        const response = await fetch(`/api/calcom/availability?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          throw new Error(message || 'Failed to load availability');
+        }
+        const data = await response.json();
+        setAvailability(data.slots || {});
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error('Failed to load availability', error);
+        setAvailability({});
+        setAvailabilityError(error instanceof Error ? error.message : 'Failed to load availability');
+      } finally {
+        if (!controller.signal.aborted) {
+          setAvailabilityLoading(false);
+        }
+      }
+    }
+
+    loadAvailability();
+
+    return () => controller.abort();
+  }, [eventTypeId]);
+
+  const mergedAvailability = React.useMemo(() => {
+    if (availableTimes) {
+      return availableTimes;
+    }
+    return availability;
+  }, [availableTimes, availability]);
+
   // Track the start date and number of days for the carousel range
   const [carouselStartDate, setCarouselStartDate] = useState<Date>(CALENDAR_START);
   const [carouselNumDays, setCarouselNumDays] = useState(NUM_DAYS);
@@ -175,12 +193,8 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     const d = days.length > 0 ? days[0].date : new Date();
     return `${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`;
   });
-  const tabListRef = useRef<HTMLUListElement>(null);
-  const lastBookedRef = useRef<{ date: string; time: string; professional?: string } | null>(null);
-
   // Calendar modal state
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const calendarIconRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setSelectedDayIdx(0);
@@ -207,40 +221,16 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   const selectedDay = days[safeSelectedDayIdx] ?? days[0];
   const selectedDayIso = selectedDay?.iso;
   const selectedDateIso = selectedDate ? toLocalDateString(selectedDate) : null;
-  const availableTimesForSelectedDay = selectedDay
-    ? (effectiveAvailableTimes[selectedDay.iso] || [])
-    : [];
-
-  const professionalForApi = React.useMemo(() => {
-    if (professionalMode === 'perService') {
-      if (bookings && bookings.length === 1 && selectedProfessionals) {
-        const id = selectedProfessionals[0];
-        const name = getProfessionalName(id);
-        return name === "Any professional" ? undefined : name;
-      }
-      return undefined;
+  const availableTimesForSelectedDay = React.useMemo(() => {
+    if (!selectedDayIso) {
+      return [];
     }
-    const name = getProfessionalName(selectedProfessional);
-    return name === "Any professional" ? undefined : name;
-  }, [professionalMode, bookings, selectedProfessionals, selectedProfessional]);
-
-  const professionalKey = React.useMemo(
-    () => normalizeProfessionalKey(professionalForApi ?? null),
-    [professionalForApi]
-  );
+    return mergedAvailability[selectedDayIso] || [];
+  }, [mergedAvailability, selectedDayIso]);
 
   const times = React.useMemo(() => {
     if (!selectedDayIso) return [] as string[];
-    let filtered = [...availableTimesForSelectedDay];
-
-    if (professionalKey !== 'any') {
-      const entry = bookingStatus?.bookedSlots?.[selectedDayIso];
-      const blocked = entry?.byProfessional?.[professionalKey] || [];
-      if (blocked.length) {
-        const blockedSet = new Set(blocked);
-        filtered = filtered.filter(slot => !blockedSet.has(slot));
-      }
-    }
+    const filtered = [...availableTimesForSelectedDay];
 
     if (
       selectedDateIso === selectedDayIso &&
@@ -251,28 +241,14 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     }
 
     const unique = Array.from(new Set(filtered));
-    unique.sort((a, b) => {
-      const aIdx = baseTimeSlots.indexOf(a);
-      const bIdx = baseTimeSlots.indexOf(b);
-      return (aIdx === -1 ? Number.POSITIVE_INFINITY : aIdx) -
-        (bIdx === -1 ? Number.POSITIVE_INFINITY : bIdx);
-    });
+    unique.sort((a, b) => timeLabelToMinutes(a) - timeLabelToMinutes(b));
     return unique;
   }, [
     availableTimesForSelectedDay,
     selectedDayIso,
     selectedDateIso,
     selectedTime,
-    baseTimeSlots,
-    professionalKey,
-    bookingStatus?.bookedSlots,
   ]);
-
-  useEffect(() => {
-    if (!selectedDate || !selectedTime) {
-      lastBookedRef.current = null;
-    }
-  }, [selectedDate, selectedTime]);
 
   // Call onContinue as soon as a time is selected (prevent infinite loop)
   const lastSentRef = useRef<{ date: string; time: string } | null>(null);
@@ -352,7 +328,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     if (date > currentEnd) {
       // Scroll right: render up to MAX_DAYS, with selected date at end
       const diffDays = Math.ceil((date.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24));
-      let newNumDays = diffDays + 1;
+      const newNumDays = diffDays + 1;
       if (newNumDays > MAX_DAYS) {
         // Only render MAX_DAYS, shift start date so selected date is at the end
         const newStart = new Date(date);
@@ -385,132 +361,19 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     }
   }
 
-  async function handleTimeClick(timeValue: string) {
-    if (!selectedDay || !selectedDayIso || isProcessing) return;
-
-    setActionMessage(null);
-    setActionError(null);
-    setIsProcessing(true);
-
-    const previousBooking = lastBookedRef.current;
-    const isSameSelection =
-      previousBooking?.date === selectedDayIso &&
-      previousBooking?.time === timeValue;
-
-    const displayDate = new Date(selectedDay.date);
-    const formattedDate = displayDate.toLocaleDateString(undefined, {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    });
-
-    if (isSameSelection && previousBooking) {
-      try {
-        await cancelSlot({
-          date: previousBooking.date,
-          time: previousBooking.time,
-          duration: DEFAULT_SLOT_DURATION,
-          professional: previousBooking.professional,
-        });
-        setSelectedTime?.(null);
-        setSelectedDate?.(null);
-        lastBookedRef.current = null;
-        setActionMessage(`Released ${timeValue} on ${formattedDate}`);
-      } catch (error) {
-        console.error('Failed to release time slot', error);
-        const message = error instanceof Error
-          ? error.message
-          : 'Failed to release time slot. Please try again.';
-        setActionError(message);
-      } finally {
-        setIsProcessing(false);
-      }
-      return;
-    }
-
-    try {
-      const bookingPayload = {
-        date: selectedDayIso,
-        time: timeValue,
-        duration: DEFAULT_SLOT_DURATION,
-        professional: professionalForApi,
-      };
-
-      await bookSlot(bookingPayload);
-
-      let releaseError: string | null = null;
-      if (previousBooking) {
-        try {
-          await cancelSlot({
-            ...previousBooking,
-            duration: DEFAULT_SLOT_DURATION,
-          });
-        } catch (error) {
-          console.error('Failed to release previous slot', error);
-          releaseError = 'Previous time slot is still reserved. Please cancel it manually if needed.';
-        }
-      }
+  function handleTimeClick(timeValue: string) {
+    if (!selectedDay || !selectedDayIso) return;
 
       setSelectedDate?.(new Date(selectedDay.date));
       setSelectedTime?.(timeValue);
-      lastBookedRef.current = bookingPayload;
-
-      setActionMessage(`Reserved ${timeValue} on ${formattedDate}`);
-      if (releaseError) {
-        setActionError(releaseError);
-      }
-    } catch (error) {
-      console.error('Booking action failed', error);
-      const message = error instanceof Error
-        ? error.message
-        : 'Failed to reserve time slot. Please try again.';
-      setActionError(message);
-    } finally {
-      setIsProcessing(false);
-    }
   }
 
-  async function handleCancelSelected() {
-    const currentBooking = lastBookedRef.current;
-    if (!currentBooking || isProcessing) return;
-
-    setActionMessage(null);
-    setActionError(null);
-    setIsProcessing(true);
-
-    const displayDate = fromIsoDate(currentBooking.date).toLocaleDateString(undefined, {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-    });
-
-    try {
-      await cancelSlot({
-        date: currentBooking.date,
-        time: currentBooking.time,
-        duration: DEFAULT_SLOT_DURATION,
-        professional: currentBooking.professional,
-      });
+  function handleCancelSelected() {
       setSelectedTime?.(null);
       setSelectedDate?.(null);
-      lastBookedRef.current = null;
-      setActionMessage(`Released ${currentBooking.time} on ${displayDate}`);
-    } catch (error) {
-      console.error('Failed to release time slot', error);
-      const message = error instanceof Error
-        ? error.message
-        : 'Failed to release time slot. Please try again.';
-      setActionError(message);
-    } finally {
-      setIsProcessing(false);
-    }
   }
 
   // Only render the calendar for the same range as the carousel
-  const calendarStartMonth = new Date(days[0].date.getFullYear(), days[0].date.getMonth(), 1);
-  const calendarEndMonth = new Date(days[days.length - 1].date.getFullYear(), days[days.length - 1].date.getMonth(), 1);
-  calendarEndMonth.setMonth(calendarEndMonth.getMonth() + 1);
-
   // Helper to get professional name by id
   function getProfessionalName(id: number | undefined) {
     if (id === undefined) return "Any professional";
@@ -745,27 +608,37 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
           </div>
         </div>
         {/* Time slots or not available */}
-        {times.length > 0 ? (
+        {shouldShowMissingEventType ? (
+          <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full text-center text-sm text-[#b91c1c]">
+            <div className="font-semibold text-base text-[#b91c1c]">We couldn’t load availability for this selection.</div>
+            <div>Please check your service configuration or try choosing a different professional.</div>
+          </div>
+        ) : availabilityLoading ? (
+          <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full text-sm text-[#7B8487]">
+            <div className="text-base font-medium text-[#141414]">Loading available times…</div>
+            <div>This may take a moment.</div>
+          </div>
+        ) : times.length > 0 ? (
           <div className="flex flex-wrap gap-3 mb-8">
             {times.map((t) => {
               const isSelected = selectedDateIso === selectedDayIso && selectedTime === t;
               const isBookable = availableTimesForSelectedDay.includes(t);
-              const isDisabled = (!isBookable && !isSelected) || (isProcessing && !isSelected);
-              const label = !isBookable && isSelected ? `${t} (reserved)` : t;
+              const isDisabled = (!isBookable && !isSelected);
+              const label = !isBookable && isSelected ? `${t} (selected)` : t;
               const baseClasses = "px-4 py-2 rounded-full border font-medium transition-colors";
               const stateClasses = isSelected
                 ? "bg-[#141414] text-white border-[#141414]"
                 : isBookable
                   ? "bg-white text-[#141414] border-[#d1d5db] hover:border-[#33383C]"
                   : "bg-[#f5f5f5] text-[#9ca3af] border-[#e5e7eb]";
-              const disabledClasses = isDisabled ? " opacity-70 cursor-not-allowed" : "";
+              const disabledClasses = isDisabled && !isSelected ? " opacity-70 cursor-not-allowed" : "";
 
               return (
                 <button
                   key={t}
                   className={`${baseClasses} ${stateClasses}${disabledClasses}`}
                   onClick={() => handleTimeClick(t)}
-                  disabled={isDisabled}
+                  disabled={isDisabled && !isSelected}
                 >
                   {label}
                 </button>
@@ -775,11 +648,11 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
         ) : (
           <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full" style={{ alignSelf: 'center' }}>
             <div className="text-lg font-semibold mt-6 text-[#141414]">Fully booked on this date</div>
-            <div className="text-sm text-[#7B8487]">Available from {days.find((d, i) => (effectiveAvailableTimes[d.iso] || []).length > 0 && i > selectedDayIdx)?.label || "another day"}</div>
+            <div className="text-sm text-[#7B8487]">Available from {days.find((d, i) => (mergedAvailability[d.iso] || []).length > 0 && i > selectedDayIdx)?.label || "another day"}</div>
             <div className="flex gap-2 mt-2">
               <button className="px-4 py-2 rounded-full border font-medium text-[#33383C] hover:bg-gray-100" onClick={() => {
                 // Go to next available date
-                const nextIdx = days.findIndex((d, i) => (effectiveAvailableTimes[d.iso] || []).length > 0 && i > selectedDayIdx);
+                const nextIdx = days.findIndex((d, i) => (mergedAvailability[d.iso] || []).length > 0 && i > selectedDayIdx);
                 if (nextIdx !== -1) setSelectedDayIdx(nextIdx);
               }}>Go to next available date</button>
               <button className="px-4 py-2 rounded-full border font-medium text-[#33383C] hover:bg-gray-100">Join waitlist</button>
@@ -803,17 +676,16 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               type="button"
               className="px-4 py-2 rounded-full border font-medium text-[#d32f2f] border-[#f5c7c7] hover:bg-[#fef2f2] transition"
               onClick={handleCancelSelected}
-              disabled={isProcessing}
+              disabled={availabilityLoading}
             >
-              Cancel slot
+              Clear selection
             </button>
           </div>
         )}
-        {(isProcessing || actionMessage || actionError) && (
+        {(availabilityLoading || availabilityError) && (
           <div className="mb-6 text-sm space-y-1">
-            {isProcessing && <div className="text-[#33383C]">Updating slot...</div>}
-            {actionMessage && <div className="text-[#047857]">{actionMessage}</div>}
-            {actionError && <div className="text-[#b91c1c]">{actionError}</div>}
+            {availabilityLoading && <div className="text-[#33383C]">Loading availability…</div>}
+            {availabilityError && <div className="text-[#b91c1c]">{availabilityError}</div>}
           </div>
         )}
         {/* Footer actions */}

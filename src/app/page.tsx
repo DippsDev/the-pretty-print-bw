@@ -26,6 +26,8 @@ const fsBrabo = localFont({
   ],
   variable: '--font-fsbrabo',
   display: 'swap',
+  preload: true,
+  fallback: ['system-ui', 'arial'],
 });
 
 export default function Home() {

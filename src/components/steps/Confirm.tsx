@@ -1,9 +1,8 @@
-import React, { useState } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/redux/store";
 import PaymentMethodModal from "../modals/PaymentMethod";
-import { createClient } from "../../../utils/supabase/client";
 
 export default function ConfirmStep({
   bookings,
@@ -14,6 +13,8 @@ export default function ConfirmStep({
   selectedProfessionals,
   total,
   onBack,
+  bookingNotes,
+  onBookingNotesChange,
 }: {
   bookings: { name: string; option: string; time: string; price: string }[];
   selectedDate: Date | null;
@@ -23,11 +24,11 @@ export default function ConfirmStep({
   selectedProfessionals: { [bookingIdx: number]: number | undefined };
   total: number;
   onBack: () => void;
+  bookingNotes: string;
+  onBookingNotesChange: (value: string) => void;
 }) {
-  const [bookingNotes, setBookingNotes] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const paymentMethod = useSelector((state: RootState) => state.paymentMethod.selected);
-  const supabase = createClient();
 
   function getProfessionalName(id: number | undefined) {
     if (id === undefined) return "Any professional";
@@ -49,45 +50,6 @@ export default function ConfirmStep({
   } else if (paymentMethod === "venue") {
     paymentLabel = "Pay at venue";
     paymentDesc = "Pay when you arrive";
-  }
-
-  // Add this handler for confirm
-  async function handleConfirm() {
-    if (paymentMethod === "card") {
-      // Get user email from supabase
-      const { data } = await supabase.auth.getUser();
-      const user = data?.user;
-      const email = user?.email || user?.user_metadata?.email;
-      // Prepare booking summary for Yoco
-      const bookingSummary = bookings.map(b => ({
-        name: b.name && b.option && !b.name.includes(b.option) ? `${b.name} - ${b.option}` : b.name,
-        option: b.option,
-        time: b.time,
-        price: b.price,
-      }));
-      // Call your backend to create a Yoco checkout session
-      const res = await fetch("/api/yoco/create-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          total,
-          bookings: bookingSummary,
-          date: selectedDate ? selectedDate.toISOString() : null,
-          time: selectedTime,
-        }),
-      });
-      const result = await res.json();
-      if (result.url) {
-        // Use window.location.assign for robust redirect (recommended by Yoco)
-        window.location.assign(result.url);
-      } else {
-        alert("Failed to initiate payment. Please try again.");
-      }
-    } else {
-      // Venue payment: proceed as normal (e.g., show confirmation, etc.)
-      // ...your logic here...
-    }
   }
 
   return (
@@ -142,7 +104,7 @@ export default function ConfirmStep({
               className="w-full border rounded-lg p-3 text-[#141414] bg-white focus:outline-none focus:ring-1 focus:ring-[#33383C]"
               placeholder="Include comments or requests about your booking"
               value={bookingNotes}
-              onChange={e => setBookingNotes(e.target.value)}
+              onChange={e => onBookingNotesChange(e.target.value)}
               rows={3}
             />
           </div>

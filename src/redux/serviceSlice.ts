@@ -1,10 +1,16 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
+export interface BookingMetadata {
+  serviceSlug?: string;
+  durationMinutes?: number;
+}
+
 export interface Booking {
   name: string;
   option: string;
   time: string;
   price: string;
+  metadata?: BookingMetadata;
 }
 
 interface ServiceState {
@@ -42,6 +48,9 @@ export const serviceSlice = createSlice({
         option: pkg,
         time: '',
         price,
+        metadata: {
+          serviceSlug: priceObj?.slug,
+        },
       });
     });
   },

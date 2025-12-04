@@ -13,12 +13,14 @@ import ProfessionalSelection from "../../components/steps/ProfessionalSelection"
 import ProfessionalPerServiceStep from "../../components/steps/ProfessionalPerServiceStep";
 import ProfessionalPerServiceModal from "../../components/modals/ProfessionalPerService";
 import { motion, AnimatePresence } from "framer-motion";
-import { setSelectedProfessional, setSelectedProfessionals } from "../../redux/professionalSlice";
+import { setSelectedProfessional, setSelectedProfessionals, resetProfessionals } from "../../redux/professionalSlice";
 import { setServiceSelection, clearServiceSelection } from "@/redux/features/navigationSlice";
-import { addBooking, removeBooking } from "../../redux/serviceSlice";
+import { addBooking, removeBooking, resetBookings } from "../../redux/serviceSlice";
 import ConfirmStep from "@/components/steps/Confirm";
 import AuthModal from "@/components/modals/Auth";
 import { createClient } from "../../../utils/supabase/client"; // use shared client utility
+import { getCalcomEventInfo, resolveProfessionalKey } from "@/lib/calcom/events";
+import { resolveServiceSlugFromBooking } from "@/lib/calcom/helpers";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
@@ -80,6 +82,7 @@ function ServicesPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const [bookingNotes, setBookingNotes] = useState("");
   const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -105,6 +108,12 @@ function ServicesPage() {
       dispatch(clearServiceSelection());
     }
   }, [selectedDate, selectedTime, dispatch]);
+
+  useEffect(() => {
+    if (bookings.length === 0) {
+      setBookingNotes("");
+    }
+  }, [bookings.length]);
 
   // Check user session on mount and after login
   React.useEffect(() => {
@@ -140,6 +149,7 @@ function ServicesPage() {
             : [];
       return {
         name: svc.label,
+        slug: svc.slug,
         description: "",
         options: [
           {
@@ -176,12 +186,14 @@ function ServicesPage() {
     // Default: single option, use timeOptions from svc
     return {
       name: svc.name,
+      slug: svc.slug,
       description: svc.description,
       options: [
-        { name: svc.name, price: svc.price, description: svc.description },
+        { name: svc.name, price: svc.price, description: svc.description, slug: svc.slug },
       ],
       basePrice: svc.price,
       timeOptions: svc.timeOptions || [],
+      durationMinutes: svc.durationMinutes,
     };
   }
 
@@ -204,7 +216,7 @@ function ServicesPage() {
   };
 
   // Add booking handler
-  function handleAddBooking(booking: { name: string; option: string; time: string; price: string }) {
+  function handleAddBooking(booking: { name: string; option: string; time: string; price: string; metadata?: { serviceSlug?: string; durationMinutes?: number } }) {
     dispatch(addBooking(booking));
     setModalOpen(false);
     dispatch(setSelectedProfessionals({ bookingIdx: bookings.length, id: undefined }));
@@ -264,20 +276,23 @@ function ServicesPage() {
       return;
     }
     if (step === 'confirm') {
-      // Yoco payment logic here
-      if (paymentMethod === "card") {
-        // Get user email from supabase
         const { data } = await supabase.auth.getUser();
         const userObj = data?.user;
         const email = userObj?.email || userObj?.user_metadata?.email;
-        // Prepare booking summary for Yoco
+
+      if (paymentMethod === "card") {
+        if (!email) {
+          alert("Please update your profile with an email address before paying by card.");
+          return;
+        }
+
         const bookingSummary = bookings.map(b => ({
           name: b.name && b.option && !b.name.includes(b.option) ? `${b.name} - ${b.option}` : b.name,
           option: b.option,
           time: b.time,
           price: b.price,
         }));
-        // Call your backend to create a Yoco checkout session
+
         const res = await fetch("/api/yoco/create-checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -287,6 +302,7 @@ function ServicesPage() {
             bookings: bookingSummary,
             date: selectedDate ? selectedDate.toISOString() : null,
             time: selectedTime,
+            notes: bookingNotes || undefined,
           }),
         });
         const result = await res.json();
@@ -297,7 +313,134 @@ function ServicesPage() {
         }
         return;
       }
-      // If not card, you can handle venue payment here if needed
+
+      if (!selectedDate || !selectedTime) {
+        alert("Please choose a date and time before confirming your booking.");
+        return;
+      }
+
+      const primaryBooking = bookings[0];
+      if (!primaryBooking) {
+        alert("We couldn't find a service to book. Please try again.");
+        return;
+      }
+
+      const serviceSlug = resolveServiceSlugFromBooking(primaryBooking);
+      if (!serviceSlug) {
+        alert("This service is not linked to Cal.com yet. Please contact support.");
+        return;
+      }
+
+      const eventInfo = getCalcomEventInfo(serviceSlug);
+      if (!eventInfo) {
+        alert("This service is not linked to Cal.com yet. Please contact support.");
+        return;
+      }
+
+      const professionalIdForBooking = (() => {
+        if (professionalMode === 'perService' && selectedProfessionals) {
+          const perServiceSelection = selectedProfessionals[0];
+          if (typeof perServiceSelection === 'number') {
+            return perServiceSelection;
+          }
+        }
+        return selectedProfessional;
+      })();
+
+      const professionalKey = resolveProfessionalKey(professionalIdForBooking);
+      const eventTypeId = eventInfo.eventTypeIds?.[professionalKey];
+
+      if (!eventTypeId) {
+        alert("We couldn't match an event type for this professional. Please try another selection.");
+        return;
+      }
+
+      if (!email) {
+        alert("Please update your profile with an email address before completing the booking.");
+        return;
+      }
+
+      const bookingDateIso = selectedDate.toISOString().split("T")[0];
+      const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const startDateTime = new Date(selectedDate);
+      const timeMatch = selectedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (timeMatch) {
+        const [, hourStr, minuteStr, periodStr] = timeMatch;
+        let hours = parseInt(hourStr, 10);
+        const minutes = parseInt(minuteStr, 10);
+        const period = periodStr.toUpperCase();
+        if (period === "PM" && hours !== 12) {
+          hours += 12;
+        } else if (period === "AM" && hours === 12) {
+          hours = 0;
+        }
+        startDateTime.setHours(hours, minutes, 0, 0);
+      }
+      const startIso = startDateTime.toISOString();
+      const customerName =
+        userObj?.user_metadata?.full_name ||
+        userObj?.user_metadata?.name ||
+        email ||
+        "Bel Amour Guest";
+
+      const response = await fetch("/api/calcom/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventTypeId,
+          start: startIso,
+          date: bookingDateIso,
+          time: selectedTime,
+          timeZone: localTimeZone,
+          durationMinutes: eventInfo.durationMinutes,
+          service: {
+            name: primaryBooking.name,
+            option: primaryBooking.option,
+            slug: serviceSlug,
+          },
+          professional: {
+            id: professionalIdForBooking ?? 0,
+            name: getProfessionalName(professionalIdForBooking),
+          },
+          customer: {
+            name: customerName,
+            email,
+            timeZone: localTimeZone,
+          },
+          notes: bookingNotes || undefined,
+          metadata: {
+            paymentMethod: paymentMethod || "venue",
+            total,
+            bookingOption: primaryBooking.option,
+            bookingPrice: primaryBooking.price,
+            ...primaryBooking.metadata,
+          },
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result?.success) {
+        const message = result?.error || result?.message || "Failed to create booking.";
+        alert(message);
+        return;
+      }
+
+      const bookingReference = result.booking?.uid || result.booking?.id;
+      alert(
+        bookingReference
+          ? `Booking confirmed! Your reference is ${bookingReference}. We’ll see you soon.`
+          : "Booking confirmed! We’ll see you soon."
+      );
+
+      dispatch(resetBookings());
+      dispatch(resetProfessionals());
+      setSelectedDate(null);
+      setSelectedTime(null);
+      setBookingNotes("");
+      setProfessionalMode('single');
+      setProfessionalModalOpen(false);
+      setPerServiceModalOpen(false);
+      setStep('services');
       return;
     }
     if (step === 'services') setStep('professionals');
@@ -581,9 +724,7 @@ function ServicesPage() {
                     professionalMode={professionalMode}
                     bookings={bookings}
                     selectedProfessionals={selectedProfessionals}
-                    setSelectedProfessionals={(bookingIdx: number, id: number | undefined) => dispatch(setSelectedProfessionals({ bookingIdx, id }))}
                     selectedProfessional={selectedProfessional}
-                    user={user}
                     selectedDate={selectedDate}
                     selectedTime={selectedTime}
                     setSelectedDate={setSelectedDate}
@@ -610,6 +751,8 @@ function ServicesPage() {
                   selectedProfessionals={selectedProfessionals}
                   total={total}
                   onBack={() => setStep('time')}
+                  bookingNotes={bookingNotes}
+                  onBookingNotesChange={setBookingNotes}
                 />
               </motion.div>
             )}

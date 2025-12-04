@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 import { getBookingStatus } from '@/lib/chat/bookingStatus';
 
+// Use Edge runtime so the SSE connection can stream efficiently
+export const runtime = 'edge';
+// Allow a reasonably long-lived SSE connection before Vercel reaps it
+export const maxDuration = 300;
+
 // Real-time booking status updates endpoint
 export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
