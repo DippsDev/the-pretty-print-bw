@@ -692,7 +692,7 @@ const normalizeProfessionalKey = (name?: string) => {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
                   placeholder="Ask about services, availability, bookings…"
-                  className="flex-1 rounded-full border border-black/10 px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 text-[#141414] placeholder-[#7B8487]"
+                  className="flex-1 rounded-full border border-black/10 px-4 py-2 text-base outline-none focus:ring-2 focus:ring-black/10 text-[#141414] placeholder-[#7B8487]"
                   ref={inputRef}
                   disabled={false}
                 />
