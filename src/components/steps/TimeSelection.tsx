@@ -682,12 +682,6 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
             </button>
           </div>
         )}
-        {(availabilityLoading || availabilityError) && (
-          <div className="mb-6 text-sm space-y-1">
-            {availabilityLoading && <div className="text-[#33383C]">Loading availability…</div>}
-            {availabilityError && <div className="text-[#b91c1c]">{availabilityError}</div>}
-          </div>
-        )}
         {/* Footer actions */}
         <div className="flex flex-row gap-4 mt-auto w-full">
           <button
