@@ -671,19 +671,7 @@ const normalizeProfessionalKey = (name?: string) => {
 
                 {/* Loading indicator - removed since isLoading is not available */}
 
-                {/* Error message */}
-                {error && (
-                  <div className="flex justify-start">
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="max-w-[80%] rounded-2xl px-3 py-2 text-sm bg-red-50 text-red-600 border border-red-200"
-                    >
-                      Sorry, something went wrong. Please try again.
-                    </motion.div>
-                  </div>
-                )}
+                {/* Error message - removed to avoid showing technical errors to users */}
               </div>
             </div>
 
