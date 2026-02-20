@@ -83,6 +83,7 @@ function ServicesPage() {
   const [user, setUser] = useState<any>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [bookingNotes, setBookingNotes] = useState("");
+  const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -473,14 +474,20 @@ function ServicesPage() {
 
   // Handler for professional dropdown in TimeSelection
   function handleOpenProfessionalModal(idx?: number) {
-    // If more than 1 booking, always open per-service modal
-    if (bookings.length > 1) {
+    // If idx is provided (clicked from mobile sheet or time selection), open modal for that specific service
+    if (typeof idx === "number") {
+      setActiveProfessionalIdx(idx);
+      // If we have multiple bookings, ensure we're in perService mode
+      if (bookings.length > 1 && professionalMode !== 'perService') {
+        setProfessionalMode('perService');
+      }
+      setProfessionalModalOpen(true);
+    } else if (bookings.length > 1) {
+      // If no idx and multiple bookings, open per-service modal
       setPerServiceModalOpen(true);
       setActiveProfessionalIdx(null);
-    } else if (professionalMode === "perService" && typeof idx === "number") {
-      setActiveProfessionalIdx(idx);
-      setPerServiceModalOpen(true);
     } else {
+      // Single booking, no idx
       setActiveProfessionalIdx(null);
       setProfessionalModalOpen(true);
     }
@@ -490,7 +497,7 @@ function ServicesPage() {
     <div className={`relative w-full min-h-[100dvh] bg-white ${interTight.className}`} style={{overflowY: 'auto', maxHeight: '100dvh'}}>
       {/* Profile icon top right */}
       {user && (
-        <div className="fixed top-6 right-8 z-[201]">
+        <div className="fixed top-6 right-4 sm:right-8 z-[201]">
           <button
             ref={profileBtnRef}
             className="flex items-center justify-center w-10 h-10 rounded-full bg-[#f5f5f5] hover:bg-[#e5e5e5] border border-[#ededed] shadow-sm transition"
@@ -531,12 +538,12 @@ function ServicesPage() {
           )}
         </div>
       )}
-      <div className="flex flex-row w-full min-h-[100dvh]">
+      <div className="flex flex-col lg:flex-row w-full min-h-[100dvh]">
         {/* Main content (left side + center) */}
-        <div className="flex-1 flex flex-col px-8 py-8">
+        <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 pb-24 lg:pb-8">
           {/* Progress tracker */}
-          <div className="w-full flex mb-8 mt-16">
-            <ul className="flex flex-row gap-0 items-center pl-1">
+          <div className="w-full flex mb-4 sm:mb-6 lg:mb-8 mt-12 sm:mt-14 lg:mt-16 overflow-x-auto">
+            <ul className="flex flex-row gap-0 items-center pl-1 min-w-max">
               {[
                 { label: 'Services' },
                 { label: 'Professional' },
@@ -545,7 +552,7 @@ function ServicesPage() {
               ].map((stepObj, idx) => (
                 <li key={stepObj.label} className="flex items-center">
                   <button
-                    className={`font-medium text-sm whitespace-nowrap transition-colors px-0 bg-transparent border-none outline-none ${
+                    className={`font-medium text-xs sm:text-sm whitespace-nowrap transition-colors px-0 bg-transparent border-none outline-none ${
                       step === 'services' && idx === 0 ||
                       step === 'professionals' && idx === 1 ||
                       step === 'time' && idx === 2
@@ -566,8 +573,8 @@ function ServicesPage() {
                     {stepObj.label}
                   </button>
                   {idx < 3 && (
-                    <span className="mx-2" aria-hidden="true">
-                      <svg fill="currentColor" width="18" height="18" viewBox="0 0 32 32"><path fillRule="evenodd" d="M19.957 9.043a1 1 0 0 1 0 1.414L14.414 16l5.543 5.543a1 1 0 0 1-1.414 1.414l-6.25-6.25a1 1 0 0 1 0-1.414l6.25-6.25a1 1 0 0 1 1.414 0" clipRule="evenodd"></path></svg>
+                    <span className="mx-1 sm:mx-2" aria-hidden="true">
+                      <svg fill="currentColor" width="16" height="16" viewBox="0 0 32 32" className="sm:w-[18px] sm:h-[18px]"><path fillRule="evenodd" d="M19.957 9.043a1 1 0 0 1 0 1.414L14.414 16l5.543 5.543a1 1 0 0 1-1.414 1.414l-6.25-6.25a1 1 0 0 1 0-1.414l6.25-6.25a1 1 0 0 1 1.414 0" clipRule="evenodd"></path></svg>
                     </span>
                   )}
                 </li>
@@ -587,7 +594,7 @@ function ServicesPage() {
                 className="flex flex-col gap-4"
               >
                 {/* Category carousel */}
-                <div className="relative mb-8">
+                <div className="relative mb-4 sm:mb-6 lg:mb-8">
                   <div className="flex items-center">
                     <ul
                       ref={tabListRef}
@@ -599,7 +606,7 @@ function ServicesPage() {
                         <li key={cat} role="tab" aria-selected={activeCategory === idx}>
                           <button
                             className={`
-                              px-4 py-2 rounded-full font-semibold whitespace-nowrap transition-colors
+                              px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-base font-semibold whitespace-nowrap transition-colors
                               ${activeCategory === idx
                                 ? "bg-[#141414] text-white"
                                 : "bg-transparent text-[#141414] hover:bg-[#ededed]"}
@@ -616,7 +623,7 @@ function ServicesPage() {
                         </li>
                       ))}
                     </ul>
-                    <div className="flex gap-1 ml-2 items-center">
+                    <div className="hidden sm:flex gap-1 ml-2 items-center">
                       <button
                         className="p-0 disabled:opacity-40 flex items-center justify-center hover:opacity-80"
                         style={{ background: "none", border: "none", boxShadow: "none", width: 32, height: 32 }}
@@ -648,7 +655,7 @@ function ServicesPage() {
                 </div>
                 {/* Services under selected category */}
                 <div>
-                  <h2 className="text-2xl font-bold mb-4 text-[#141414]">{SERVICE_CATEGORIES[activeCategory]}</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-[#141414]">{SERVICE_CATEGORIES[activeCategory]}</h2>
                   <ServiceSelectionStep
                     services={[SERVICES[activeCategory]]}
                     onSelectService={svc => {
@@ -666,9 +673,9 @@ function ServicesPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 40 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="flex flex-col gap-6 flex-1"
+                className="flex flex-col gap-4 sm:gap-6 flex-1"
               >
-                <h2 className="text-2xl font-bold mb-2 text-[#141414]">Select Professional</h2>
+                <h2 className="text-xl sm:text-2xl font-bold mb-2 text-[#141414]">Select Professional</h2>
                 <ProfessionalSelection
                   onBack={() => setStep('services')}
                   onSelect={id => {
@@ -713,10 +720,10 @@ function ServicesPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 40 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="flex flex-col gap-6 flex-1"
+                className="flex flex-col gap-4 sm:gap-6 flex-1"
               >
-                <div className="flex flex-col gap-6 flex-1">
-                  <h2 className="text-3xl font-bold mb-2 text-[#141414]">Select time</h2>
+                <div className="flex flex-col gap-4 sm:gap-6 flex-1">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 text-[#141414]">Select time</h2>
                   <TimeSelectionModal
                     onBack={() => { setProfessionalMode('single'); setStep('professionals'); }}
                     onContinue={handleTimeSelection}
@@ -740,7 +747,7 @@ function ServicesPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 40 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="flex flex-col gap-6 flex-1"
+                className="flex flex-col gap-4 sm:gap-6 flex-1"
               >
                 <ConfirmStep
                   bookings={bookings}
@@ -758,8 +765,8 @@ function ServicesPage() {
             )}
           </AnimatePresence>
         </div>
-        {/* Right: Summary box as card, fixed position, side by side */}
-        <div className="hidden md:flex md:flex-col items-center py-8 px-6" style={{width: 380, minWidth: 380, maxWidth: 380, height: '100dvh', position: 'sticky', top: 0, right: 0, zIndex: 10}}>
+        {/* Right: Summary box as card, fixed position on desktop, bottom sheet on mobile */}
+        <div className="hidden lg:flex lg:flex-col items-center py-8 px-6" style={{width: 380, minWidth: 380, maxWidth: 380, height: '100dvh', position: 'sticky', top: 0, right: 0, zIndex: 10}}>
           <div className="w-full max-w-xs mx-auto bg-white rounded-2xl border p-6 mt-16 flex flex-col gap-6" style={{maxHeight: 'calc(100vh - 48px)', minHeight: 0, display: 'flex'}}>
             {/* Title */}
             <div className="flex flex-col gap-1">
@@ -861,6 +868,173 @@ function ServicesPage() {
             </button>
           </div>
         </div>
+        
+        {/* Mobile bottom sheet for booking summary */}
+        <AnimatePresence>
+          {bookings.length > 0 && (
+            <motion.div
+              key={`mobile-sheet-${bookings.length}-${JSON.stringify(selectedProfessionals)}`}
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-[#ededed] shadow-2xl z-[100] safe-area-inset-bottom"
+              style={{ maxHeight: mobileSheetExpanded ? '70vh' : 'auto' }}
+            >
+              {/* Expandable header */}
+              <button
+                onClick={() => setMobileSheetExpanded(!mobileSheetExpanded)}
+                className="w-full px-4 py-3 flex items-center justify-between border-b border-[#ededed]"
+              >
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-xs text-[#7B8487]">{bookings.length} {bookings.length === 1 ? 'service' : 'services'}</span>
+                  <span className="font-semibold text-[#232323] text-base truncate">
+                    {total > 0 ? `ZAR ${total.toFixed(2)}` : "free"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#7B8487]">{mobileSheetExpanded ? 'Hide' : 'View'} details</span>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className={`transition-transform duration-200 ${mobileSheetExpanded ? 'rotate-180' : ''}`}
+                  >
+                    <path d="M6 9l6 6 6-6" stroke="#7B8487" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </button>
+
+              {/* Expanded content */}
+              <AnimatePresence>
+                {mobileSheetExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-4 py-3 max-h-[50vh] overflow-y-auto">
+                      {/* Date & Time */}
+                      {(selectedDate && selectedTime) && (
+                        <div className="flex flex-col gap-2 mb-4 pb-4 border-b border-[#ededed]">
+                          <div className="flex flex-row items-center gap-2">
+                            <svg width="18" height="18" fill="#7B8487" viewBox="0 0 32 32">
+                              <path fillRule="evenodd" d="M10 2a1 1 0 0 1 1 1v1h10V3a1 1 0 1 1 2 0v1h3a2 2 0 0 1 2 2v20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3V3a1 1 0 0 1 1-1M9 6H6v4h20V6h-3v1a1 1 0 1 1-2 0V6H11v1a1 1 0 1 1-2 0zm17 6H6v14h20z" clipRule="evenodd"></path>
+                            </svg>
+                            <p className="text-sm text-[#232323] font-medium">
+                              {selectedDate.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" })}
+                            </p>
+                          </div>
+                          <div className="flex flex-row items-center gap-2">
+                            <svg width="18" height="18" fill="#7B8487" viewBox="0 0 32 32">
+                              <path fillRule="evenodd" d="M16 5C9.925 5 5 9.925 5 16s4.925 11 11 11 11-4.925 11-11S22.075 5 16 5M3 16C3 8.82 8.82 3 16 3s13 5.82 13 13-5.82 13-13 13S3 23.18 3 16m13-8a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-7a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1" clipRule="evenodd"></path>
+                            </svg>
+                            <p className="text-sm text-[#232323] font-medium">{selectedTime}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Helper text */}
+                      {bookings.length > 0 && (
+                        <div className="mb-3 text-xs text-[#7B8487] flex items-center gap-1">
+                          <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                          </svg>
+                          <span>Tap professional name to change</span>
+                        </div>
+                      )}
+
+                      {/* Bookings list */}
+                      <div className="space-y-2 mb-4">
+                        {bookings.map((b, i) => (
+                          <div key={i} className="flex items-start gap-2 bg-[#fafbfc] rounded-lg p-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-sm text-[#141414] mb-1">{b.name}</div>
+                              {b.option && b.option !== b.name && (
+                                <div className="text-xs text-[#7B8487] mb-1">{b.option}</div>
+                              )}
+                              {b.time && (
+                                <div className="text-xs text-[#7B8487] mb-1">{b.time}</div>
+                              )}
+                              {/* Clickable professional selector */}
+                              <button
+                                onClick={() => handleOpenProfessionalModal(i)}
+                                className="text-xs text-[#33383C] mt-1 flex items-center gap-1 hover:text-[#141414] transition-colors"
+                              >
+                                <svg width="14" height="14" fill="currentColor" viewBox="0 0 32 32">
+                                  <circle cx="16" cy="12" r="5" />
+                                  <path d="M7 24c0-4 4-7 9-7s9 3 9 7" />
+                                </svg>
+                                <span className="underline">
+                                  {professionalMode === "perService"
+                                    ? getProfessionalName(selectedProfessionals[i])
+                                    : getProfessionalName(selectedProfessional)
+                                  }
+                                </span>
+                                <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M7 10l5 5 5-5z"/>
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-[#232323] text-sm whitespace-nowrap">{b.price}</span>
+                              <button
+                                type="button"
+                                aria-label="Remove booking"
+                                className="p-1 rounded-full hover:bg-gray-200 focus:outline-none"
+                                onClick={() => handleRemoveBooking(i)}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                  <path d="M4.8 4.8l6.4 6.4M11.2 4.8l-6.4 6.4" stroke="#33383C" strokeWidth="1.5" strokeLinecap="round"/>
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Total */}
+                      <div className="flex items-center justify-between pt-3 border-t border-[#ededed]">
+                        <span className="font-semibold text-[#141414] text-base">Total</span>
+                        <span className="font-semibold text-[#232323] text-base">
+                          {total > 0 ? `ZAR ${total.toFixed(2)}` : "free"}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Continue button */}
+              <div className="px-4 py-4 border-t border-[#ededed]">
+                <button
+                  className={`w-full py-3 rounded-full font-semibold text-base ${
+                    bookings.length > 0 &&
+                    (
+                      (step !== 'time' && step !== 'confirm') ||
+                      (step === 'time' && selectedDate && selectedTime) ||
+                      (step === 'confirm')
+                    )
+                      ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]"
+                      : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                  }`}
+                  disabled={
+                    bookings.length === 0 ||
+                    (step === 'time' && (!selectedDate || !selectedTime))
+                  }
+                  onClick={handleContinue}
+                >
+                  {step === 'confirm' && paymentMethod === "card"
+                    ? "Confirm & Pay"
+                    : "Continue"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       {/* Service Modal with AnimatePresence for smooth transitions */}
       <AnimatePresence>

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   setCurrentPage,
@@ -15,7 +16,6 @@ import menuIconAnimation from "@/animations/menu icon animation.json";
 import localFont from 'next/font/local';
 import { LottieRefCurrentProps } from "lottie-react";
 import { Inter_Tight } from "next/font/google";
-import { useRouter } from "next/navigation";
 import { SERVICES } from "@/lib/servicesData";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
@@ -60,12 +60,12 @@ const InsideArrowSvg = (props: React.SVGProps<SVGSVGElement>) => (
 );
 
 const Navbar = () => {
+  const router = useRouter();
   const isOpen = useSelector((state: RootState) => state.navigation.navbarOpen);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<number | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
-  // Remove time selection logic
   const dispatch = useDispatch();
   const navRef = useRef<HTMLDivElement>(null);
   const lottieRef = useRef<LottieRefCurrentProps>(null);
@@ -80,12 +80,10 @@ const Navbar = () => {
   // Play correct segment on nav state change
   React.useEffect(() => {
     if (!lottieRef.current) return;
-    lottieRef.current.setSpeed(2.2); // Fast and responsive
+    lottieRef.current.setSpeed(2.2);
     if (isOpen) {
-      // Hamburger to X (frames 0 to 74)
       lottieRef.current.playSegments([0, 74], true);
     } else {
-      // X to Hamburger (frames 74 to 0)
       lottieRef.current.playSegments([74, 0], true);
     }
   }, [isOpen]);
@@ -117,9 +115,8 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [isOpen, dispatch]);
 
-  // Contact button styles
   const contactBtn =
-    "w-full mt-auto py-2 px-0 rounded-sm text-center font-semibold text-[1rem] transition-all duration-200 " +
+    "w-full mt-auto py-2 px-0 rounded-sm text-center font-semibold text-sm sm:text-base transition-all duration-200 " +
     "bg-[#C34E961A] text-[#C34E96] hover:bg-[#C34E9633] border-none outline-none";
 
   // Responsive width for nav: wider when servicesOpen
@@ -147,7 +144,6 @@ const Navbar = () => {
     }
   }, [servicesOpen, dispatch]);
 
-  // When a service and package are selected, go to services page and store selection
   React.useEffect(() => {
     if (
       servicesOpen &&
@@ -160,11 +156,11 @@ const Navbar = () => {
           pkg: SERVICES[selectedService].services[selectedPackage],
         } as any)
       );
-      dispatch(setCurrentPage("services"));
+      router.push('/book');
       dispatch(setNavbarOpen(false));
       setServicesOpen(false);
     }
-  }, [servicesOpen, selectedService, selectedPackage, dispatch]);
+  }, [servicesOpen, selectedService, selectedPackage, dispatch, router]);
 
   // Show first service by default when opening services panel
   React.useEffect(() => {
@@ -187,14 +183,13 @@ const Navbar = () => {
             setServicesOpen(false);
           }
         }}
-        className="fixed top-6 left-6 z-[91] p-0 m-0 bg-transparent border-none outline-none w-6 h-6"
+        className="fixed top-6 left-4 sm:left-6 z-[91] p-0 m-0 bg-transparent border-none outline-none w-6 h-6"
         aria-label="Open navigation"
       >
         <MenuLottieIcon />
       </button>
-      {/* Divider below menu icon */}
       <div
-        className={`fixed left-6 z-[91] top-[56px] h-[1px] bg-white/60
+        className={`fixed left-4 sm:left-6 z-[91] top-[56px] h-[1px] bg-white/60
           transition-all duration-500 ease-in-out ${isOpen ? "opacity-100" : "opacity-0"}
           pointer-events-none ml-1`}
         style={{
@@ -231,9 +226,6 @@ const Navbar = () => {
                     onClick={() => {
                       if (item === 'Services') {
                         setServicesOpen(true);
-                      } else {
-                        dispatch(setCurrentPage(item.toLowerCase()));
-                        dispatch(setNavbarOpen(false));
                       }
                     }}
                     className={`menu-item ml-4 text-sm font-medium flex items-center gap-2 w-full justify-between ${interTight.className} ${
@@ -284,7 +276,6 @@ const Navbar = () => {
                       <button
                         key={s.label}
                         onClick={() => {
-                          // If this is a package group (has prices), go directly to services page
                           if (s.prices) {
                             dispatch(
                               setServiceSelection({
@@ -293,7 +284,7 @@ const Navbar = () => {
                                 time: undefined,
                               } as any)
                             );
-                            dispatch(setCurrentPage("services"));
+                            router.push('/book');
                             dispatch(setNavbarOpen(false));
                             setServicesOpen(false);
                           } else {
@@ -337,10 +328,9 @@ const Navbar = () => {
               </div>
             )}
           </div>
-          {/* Contact button with fade animation */}
           <div className={`w-full transition-opacity duration-300 ease-in-out ${servicesOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
             <button
-              onClick={() => dispatch(setCurrentPage("contact"))}
+              onClick={() => router.push('/contact')}
               className={contactBtn + ` transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
             >
               Contact

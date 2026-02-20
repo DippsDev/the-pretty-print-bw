@@ -83,7 +83,7 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 flex flex-col"
+            className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 sm:p-8 flex flex-col"
             style={{
               minHeight: 320,
               zIndex: 1,

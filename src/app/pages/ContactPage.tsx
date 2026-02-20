@@ -30,15 +30,15 @@ export function ContactForm() {
 
   return (
     <form
-      className={`flex flex-col gap-6 w-full max-w-[420px] mx-auto ${inter.className}`}
+      className={`flex flex-col gap-4 sm:gap-6 w-full max-w-[420px] mx-auto ${inter.className}`}
       autoComplete="off"
       onSubmit={e => e.preventDefault()}
     >
-      <div className="text-[24px] font-semibold text-[#222222]">Contact us by e-mail</div>
-      <div className="text-[12px] text-[#7B8487]">*Required fields</div>
+      <div className="text-xl sm:text-2xl font-semibold text-[#222222]">Contact us by e-mail</div>
+      <div className="text-xs sm:text-sm text-[#7B8487]">*Required fields</div>
       
-      <div className="space-y-4">
-        <div className="text-[16px] font-semibold text-[#222222]">Your information</div>
+      <div className="space-y-3 sm:space-y-4">
+        <div className="text-sm sm:text-base font-semibold text-[#222222]">Your information</div>
         
         {/* Title select */}
         <div>
@@ -63,7 +63,7 @@ export function ContactForm() {
         </div>
 
         {/* Name inputs */}
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <div className="flex-1">
             <input
               required
@@ -89,7 +89,7 @@ export function ContactForm() {
         </div>
 
         {/* Contact inputs */}
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           <div className="flex-1">
             <input
               required
@@ -117,7 +117,7 @@ export function ContactForm() {
 
       {/* Message area */}
       <div className="space-y-2 relative">
-        <div className="text-[16px] font-semibold text-[#222222]">Your request</div>
+        <div className="text-sm sm:text-base font-semibold text-[#222222]">Your request</div>
         <div className="relative">
           <textarea
             required
@@ -144,7 +144,7 @@ export function ContactForm() {
 
       <button
         type="submit"
-        className="mt-3 w-[16rem] bg-[#333333] text-white py-2 rounded-sm text-sm transition hover:bg-neutral-900"
+        className="mt-3 w-full sm:w-[16rem] bg-[#333333] text-white py-2 rounded-sm text-sm transition hover:bg-neutral-900"
         style={{ fontFamily: inter.style.fontFamily }}
       >
         Send
@@ -155,14 +155,14 @@ export function ContactForm() {
 
 export default function ContactPage() {
   return (
-    <div className={`flex flex-col md:flex-row min-h-[100dvh] w-full bg-white ${inter.className}`}>
+    <div className={`flex flex-col lg:flex-row min-h-[100dvh] w-full bg-white ${inter.className}`}>
       {/* Left side */}
-      <div className="flex flex-1 items-center justify-center px-6 py-12 bg-white">
+      <div className="flex flex-1 items-center justify-center px-6 py-8 lg:py-12 bg-white">
         <div className="max-w-md mx-auto">
-          <p className="text-[18px] text-[#6E6B68] mb-4">
+          <p className="text-base sm:text-lg text-[#6E6B68] mb-4">
             Our wellness specialists at Bel Amour Spa would be honored to guide you toward your perfect escape and rejuvenation experience.
           </p>
-          <p className="text-[18px] text-[#6E6B68] mb-4">
+          <p className="text-base sm:text-lg text-[#6E6B68] mb-4">
             Contact us to begin your journey to radiant relaxation.
           </p>
           <p className="text-sm text-[#6E6B68]">
@@ -171,7 +171,7 @@ export default function ContactPage() {
         </div>
       </div>
       {/* Right side */}
-      <div className="flex flex-1 items-center justify-center px-6 py-12 bg-white">
+      <div className="flex flex-1 items-center justify-center px-6 py-8 lg:py-12 bg-white">
         <ContactForm />
       </div>
     </div>

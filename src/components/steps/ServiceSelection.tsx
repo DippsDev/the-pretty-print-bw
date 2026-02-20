@@ -36,10 +36,10 @@ export default function ServiceSelectionStep({ services, onSelectService }: Serv
           return (
             <div
               key={group.label}
-              className="border rounded-lg p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-gray-50 transition"
+              className="border rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-gray-50 transition"
               onClick={() => onSelectService(group)}
             >
-              <div className="font-semibold text-lg text-[#141414]">{group.label}</div>
+              <div className="font-semibold text-base sm:text-lg text-[#141414]">{group.label}</div>
               {/* List included services */}
               <div className="mt-2">
                 <div className="text-xs font-semibold text-[#232323] mb-1">Includes:</div>
@@ -71,10 +71,10 @@ export default function ServiceSelectionStep({ services, onSelectService }: Serv
         return group.services.map((svc, j) => (
           <div
             key={svc.name}
-            className="border rounded-lg p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-gray-50 transition"
+            className="border rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-gray-50 transition"
             onClick={() => onSelectService(svc)}
           >
-            <div className="font-semibold text-lg text-[#141414]">{svc.name}</div>
+            <div className="font-semibold text-base sm:text-lg text-[#141414]">{svc.name}</div>
             {svc.description && (
               <div className="text-sm text-[#7B8487] mt-1">{svc.description}</div>
             )}

@@ -5,11 +5,6 @@ import { z } from 'zod';
 import { SERVICES } from '@/lib/servicesData';
 import { getBookingStatus } from '@/lib/chat/bookingStatus';
 
-// Run this route on the Edge runtime for fast startup and streaming support
-export const runtime = 'edge';
-// Cap the maximum duration so Vercel doesn’t kill the function with a 300s timeout
-export const maxDuration = 30;
-
 // Helper function to resolve service and price
 function resolveServiceAndPrice(serviceName: string, packageName?: string) {
   const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();

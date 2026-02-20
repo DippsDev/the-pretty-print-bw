@@ -104,7 +104,7 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.22 }}
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 flex flex-col min-h-0"
+            className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 sm:p-8 flex flex-col min-h-0"
             style={{
               height: 'auto',
               zIndex: 1,
@@ -113,7 +113,7 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
           >
             <div className="flex items-start justify-between mb-2">
               <div>
-                <h2 className={`text-2xl font-semibold text-[#141414] ${interTight.className}`}>{service.name}</h2>
+                <h2 className={`text-xl sm:text-2xl font-semibold text-[#141414] ${interTight.className}`}>{service.name}</h2>
                 {service.note && (
                   <p className="text-sm text-[#7B8487] mt-2">{service.note}</p>
                 )}
@@ -127,10 +127,9 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
                 <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><path fill="#33383C" fillRule="evenodd" d="M7.293 7.293a1 1 0 0 1 1.414 0L16 14.586l7.293-7.293a1 1 0 1 1 1.414 1.414L17.414 16l7.293 7.293a1 1 0 0 1-1.414 1.414L16 17.414l-7.293 7.293a1 1 0 0 1-1.414-1.414L14.586 16 7.293 8.707a1 1 0 0 1 0-1.414" clipRule="evenodd"></path></svg>
               </button>
             </div>
-            {/* Only show select option if there are multiple price options (e.g., for 1/for 2) */}
             {isPackageGroup && priceOptions.length > 1 ? (
-              <div className="mt-4">
-                <p className="font-semibold mb-2 text-base text-[#141414]">Select an option *</p>
+              <div className="mt-3 sm:mt-4">
+                <p className="font-semibold mb-2 text-sm sm:text-base text-[#141414]">Select an option *</p>
                 <div role="radiogroup" aria-orientation="vertical" className="flex flex-col gap-2">
                   {priceOptions.map((opt, idx) => (
                     <label key={opt.label} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 cursor-pointer">
@@ -150,10 +149,8 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
                 </div>
               </div>
             ) : null}
-            {/* If not multiple price options, do not show the service title again (avoid duplicate) */}
-            {/* Show packages if present */}
             {option.packages && option.packages.length > 0 && (
-              <div className="mt-4">
+              <div className="mt-3 sm:mt-4">
                 <div className="text-xs font-semibold text-[#232323] mb-1">Includes:</div>
                 <ul className="flex flex-col gap-1">
                   {option.packages.map((pkg, idx) => (
@@ -166,20 +163,19 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
                 </ul>
               </div>
             )}
-            {/* Show time as text if only one, not as input */}
             {showTime && (
-              <div className="mt-4">
-                <span className="font-medium text-[#141414] text-base">Time: {timeText}</span>
+              <div className="mt-3 sm:mt-4">
+                <span className="font-medium text-[#141414] text-sm sm:text-base">Time: {timeText}</span>
               </div>
             )}
-            <div className="mt-3">
-              <span className="font-medium text-[#141414] text-lg">
+            <div className="mt-2 sm:mt-3">
+              <span className="font-medium text-[#141414] text-base sm:text-lg">
                 {price ? `${price}` : ""}
               </span>
             </div>
-            <div className="mt-8 flex flex-col items-center">
+            <div className="mt-6 sm:mt-8 flex flex-col items-center">
               <button
-                className={`w-full py-2 rounded-full font-semibold text-base ${canAdd ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]" : "bg-gray-300 text-gray-600 cursor-not-allowed"}`}
+                className={`w-full py-2 rounded-full font-semibold text-sm sm:text-base ${canAdd ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]" : "bg-gray-300 text-gray-600 cursor-not-allowed"}`}
                 disabled={!canAdd}
                 onClick={() => {
                   if (canAdd && onAddBooking) {

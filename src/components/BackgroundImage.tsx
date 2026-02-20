@@ -1,11 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useSelector } from "react-redux";
-import type { RootState } from "@/redux/store";
+import { usePathname } from "next/navigation";
 
 export default function BackgroundImage() {
-  const currentPage = useSelector((state: RootState) => state.navigation.currentPage);
+  const pathname = usePathname();
+  const isHomePage = pathname === '/';
 
   return (
     <Image
@@ -14,7 +14,7 @@ export default function BackgroundImage() {
       fill
       className={`fixed left-0 top-0 mt-[156px] w-full h-[678px] object-cover z-[100] pointer-events-none select-none
         transition-opacity duration-500 ease-[cubic-bezier(.4,0,.2,1)]
-        ${currentPage === 'home' ? 'opacity-100' : 'opacity-0'}
+        ${isHomePage ? 'opacity-100' : 'opacity-0'}
       `}
       priority
       draggable={false}

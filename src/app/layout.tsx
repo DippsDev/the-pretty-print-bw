@@ -48,15 +48,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={fsBrabo.className}>
-      <body className={`bg-white/90 relative overflow-hidden`}>
+      <body className={`bg-white relative overflow-hidden`}>
         <Providers>
           <BookingUpdatesProvider />
           <BackgroundImage />
           <Navbar />
-          <main className="bg-white h-[100dvh] w-[100dvw]">
+          <main className="bg-white min-h-[100dvh] w-full">
             <MainContentOverlay>{children}</MainContentOverlay>
           </main>
-          {/* Global Chatbot mounted at root so it appears on all pages */}
           <Chatbot />
         </Providers>
       </body>

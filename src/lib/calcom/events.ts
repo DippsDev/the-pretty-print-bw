@@ -20,9 +20,9 @@ const TEAM_SLUG = 'bel-amour';
 
 export const PROFESSIONAL_ID_TO_KEY: Record<number, ProfessionalKey> = {
   0: 'team',
-  1: 'banele',
-  2: 'dineo',
-  3: 'michelle',
+  34: 'banele',
+  35: 'dineo',
+  36: 'michelle',
 };
 
 export const PROFESSIONAL_KEY_TO_USERNAME: Record<ProfessionalKey, string> = {

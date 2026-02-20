@@ -50,7 +50,7 @@ export default function AddCardModal({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.22 }}
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-8 flex flex-col"
+            className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 sm:p-8 flex flex-col"
             style={{ minHeight: 420, zIndex: 1 }}
             onClick={e => e.stopPropagation()}
           >
