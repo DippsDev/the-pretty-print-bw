@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { useChat } from '@ai-sdk/react';
 import { lastAssistantMessageIsCompleteWithToolCalls, DefaultChatTransport } from 'ai';
@@ -48,6 +49,7 @@ interface CheckAvailabilityInput {
 const interTight = Inter_Tight({ subsets: ['latin'], weight: '400' });
 
 export default function Chatbot() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [hasUnread, setHasUnread] = useState(false);
@@ -155,15 +157,15 @@ const normalizeProfessionalKey = (name?: string) => {
             dispatch(setCurrentSection(resolvedSection));
           }
 
+          // Navigate to booking page with appropriate step
+          router.push('/book');
+          
           if (page === 'professionals') {
-            dispatch(setCurrentPage('services'));
             dispatch(setStep('professionals'));
           } else if (page === 'timeSelection') {
-            dispatch(setCurrentPage('services'));
             dispatch(setStep('time'));
           } else {
             // Default to services step
-            dispatch(setCurrentPage('services'));
             dispatch(setStep('services'));
           }
           
@@ -202,8 +204,8 @@ const normalizeProfessionalKey = (name?: string) => {
             time: `${date} at ${time}` 
           }));
           
-          // Navigate to time selection step to show the selection
-          dispatch(setCurrentPage('services'));
+          // Navigate to booking page time selection step
+          router.push('/book');
           dispatch(setStep('time'));
           
           addToolResult({
@@ -408,8 +410,8 @@ const normalizeProfessionalKey = (name?: string) => {
                   if (!existsPkg) {
                     dispatch({ type: 'ADD_PACKAGE_SERVICE', payload: { group: pkgGroup, pkg: selectedPkg } });
                   }
-                  // Navigate and show correct section
-                  dispatch(setCurrentPage('services'));
+                  // Navigate to booking page and show correct section
+                  router.push('/book');
                   dispatch(setCurrentSection(pkgGroup.label));
                   dispatch(setStep('services'));
                   break;
@@ -452,14 +454,15 @@ const normalizeProfessionalKey = (name?: string) => {
                 if (group) resolvedSection = group.label;
               }
               if (resolvedSection) dispatch(setCurrentSection(resolvedSection));
+              
+              // Navigate to booking page
+              router.push('/book');
+              
               if (page === 'professionals') {
-                dispatch(setCurrentPage('services'));
                 dispatch(setStep('professionals'));
               } else if (page === 'timeSelection') {
-                dispatch(setCurrentPage('services'));
                 dispatch(setStep('time'));
               } else {
-                dispatch(setCurrentPage('services'));
                 dispatch(setStep('services'));
               }
               break;
@@ -480,7 +483,7 @@ const normalizeProfessionalKey = (name?: string) => {
                   pkg: '', 
                   time: `${date} at ${time}` 
                 }));
-                dispatch(setCurrentPage('services'));
+                router.push('/book');
                 dispatch(setStep('time'));
               }
               break;
