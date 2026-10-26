@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { STYLISTS } from "@/lib/stylists";
 
 export interface Professional {
   id: number;
@@ -17,33 +18,7 @@ interface ProfessionalSelectionModalProps {
   professionals?: Professional[];
 }
 
-const defaultProfessionals: Professional[] = [
-  {
-    id: 0,
-    name: "Any professional",
-    role: "for maximum availability",
-    avatar: null,
-    isGroup: true,
-  },
-  {
-    id: 1,
-    name: "Banele",
-    role: "Therapist",
-    avatar: "/professionals/banele.jpg",
-  },
-  {
-    id: 2,
-    name: "Dineo",
-    role: "Therapist",
-    avatar: "/professionals/dineo.jpg",
-  },
-  {
-    id: 3,
-    name: "Michelle",
-    role: "Therapist",
-    avatar: "/professionals/michelle.jpg",
-  },
-];
+const defaultProfessionals: Professional[] = STYLISTS;
 
 const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
   open,
@@ -131,8 +106,10 @@ const ProfessionalSelectionModal: React.FC<ProfessionalSelectionModalProps> = ({
                           </g>
                         </svg>
                       </span>
+                    ) : pro.avatar ? (
+                      <img src={pro.avatar} alt="" className="w-14 h-14 object-cover" />
                     ) : (
-                      <img src={pro.avatar!} alt={pro.name} className="w-14 h-14 rounded-full object-cover" />
+                      <span className="wf-avatar" aria-hidden="true">{pro.name.replace("Stylist ", "")}</span>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-lg text-[#141414] truncate">{pro.name}</div>

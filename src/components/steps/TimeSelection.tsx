@@ -6,6 +6,18 @@ import { getCalcomEventInfo, resolveProfessionalKey } from "@/lib/calcom/events"
 import { resolveServiceSlugFromBooking } from "@/lib/calcom/helpers";
 import type { Booking } from "@/redux/serviceSlice";
 
+const PROTOTYPE_SLOTS = [
+  "9:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "12:00 PM",
+  "1:00 PM",
+  "2:00 PM",
+  "3:00 PM",
+  "4:00 PM",
+  "5:00 PM",
+];
+
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
 // Helper to get days for the next N days (default: 90 days)
@@ -73,7 +85,6 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   onBack,
   onContinue,
   availableTimes,
-  onOpenProfessionalModal,
   professionalMode = 'single',
   bookings,
   selectedProfessionals,
@@ -84,6 +95,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   setSelectedTime,
 }) => {
   const tabListRef = useRef<HTMLUListElement>(null);
+  const dayScrollerRef = useRef<HTMLDivElement>(null);
   const calendarIconRef = useRef<HTMLButtonElement>(null);
 
   const [availability, setAvailability] = useState<Record<string, string[]>>({});
@@ -121,8 +133,6 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     if (!eventInfo) return undefined;
     return eventInfo.eventTypeIds?.[professionalKey];
   }, [eventInfo, professionalKey]);
-
-  const shouldShowMissingEventType = Boolean(primaryBooking) && !availabilityLoading && !eventTypeId;
 
   useEffect(() => {
     if (!eventTypeId) {
@@ -189,23 +199,11 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
 
   // Find the index of the selected day in the carousel
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
-  const [visibleMonthYear, setVisibleMonthYear] = useState(() => {
-    const d = days.length > 0 ? days[0].date : new Date();
-    return `${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`;
-  });
-  // Calendar modal state
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   useEffect(() => {
     setSelectedDayIdx(0);
   }, [carouselStartDate, carouselNumDays]);
-
-  // Update visibleMonthYear when selectedDayIdx changes
-  useEffect(() => {
-    const safeIdx = Math.max(0, Math.min(selectedDayIdx, days.length - 1));
-    const d = days[safeIdx]?.date ?? new Date();
-    setVisibleMonthYear(`${d.toLocaleString(undefined, { month: "long" })} ${d.getFullYear()}`);
-  }, [selectedDayIdx, days]);
 
   useEffect(() => {
     if (!selectedDate || !selectedTime) return;
@@ -228,7 +226,10 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     return mergedAvailability[selectedDayIso] || [];
   }, [mergedAvailability, selectedDayIso]);
 
+  const prototypeSlots = Boolean(primaryBooking) && !availabilityLoading && !eventTypeId;
+
   const times = React.useMemo(() => {
+    if (prototypeSlots) return PROTOTYPE_SLOTS;
     if (!selectedDayIso) return [] as string[];
     const filtered = [...availableTimesForSelectedDay];
 
@@ -248,6 +249,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     selectedDayIso,
     selectedDateIso,
     selectedTime,
+    prototypeSlots,
   ]);
 
   // Call onContinue as soon as a time is selected (prevent infinite loop)
@@ -267,16 +269,39 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
     }
   }, [selectedTime, selectedDay, onContinue]);
 
-  // Scroll to selected day in carousel (always after days update)
+  const [canScrollDatesBack, setCanScrollDatesBack] = useState(false);
+  const [canScrollDatesForward, setCanScrollDatesForward] = useState(false);
+
+  function updateDateScrollEdges() {
+    const scroller = dayScrollerRef.current;
+    if (!scroller) return;
+    setCanScrollDatesBack(scroller.scrollLeft > 4);
+    setCanScrollDatesForward(scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4);
+  }
+
+  function scrollDates(direction: number) {
+    const scroller = dayScrollerRef.current;
+    if (!scroller) return;
+    const distance = Math.max(scroller.clientWidth - 72, 160);
+    scroller.scrollBy({ left: direction * distance, behavior: "smooth" });
+  }
+
   useEffect(() => {
-    if (tabListRef.current && days[selectedDayIdx]) {
-      const tab = tabListRef.current.children[selectedDayIdx] as HTMLElement;
-      if (tab) {
-        // Use scrollIntoView with block: "center" for smoother experience
-        tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "center" });
-      }
-    }
+    const scroller = dayScrollerRef.current;
+    const tab = tabListRef.current?.children[selectedDayIdx] as HTMLElement | undefined;
+    if (!scroller || !tab) return;
+    const left = tab.offsetLeft - (scroller.clientWidth - tab.clientWidth) / 2;
+    scroller.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
   }, [selectedDayIdx, days]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(updateDateScrollEdges);
+    window.addEventListener("resize", updateDateScrollEdges);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updateDateScrollEdges);
+    };
+  }, [days]);
 
   // Handle outside click for calendar modal
   useEffect(() => {
@@ -368,84 +393,25 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
       setSelectedTime?.(timeValue);
   }
 
-  function handleCancelSelected() {
-      setSelectedTime?.(null);
-      setSelectedDate?.(null);
-  }
-
-  // Only render the calendar for the same range as the carousel
-  // Helper to get professional name by id
-  function getProfessionalName(id: number | undefined) {
-    if (id === undefined) return "Any professional";
-    const professionals = [
-      { id: 0, name: "Any professional" },
-      { id: 1, name: "Banele" },
-      { id: 2, name: "Dineo" },
-      { id: 3, name: "Michelle" },
-    ];
-    return professionals.find(p => p.id === id)?.name || "Any professional";
+  function displayTime(label: string) {
+    return label.replace(/\s*(AM|PM)\b/i, (_, period: string) => period.toLowerCase());
   }
 
   return (
-    <div className="flex flex-col w-full h-full gap-4">
-      <div className="flex flex-col w-full bg-white rounded-2xl shadow-none p-0" style={{ minHeight: 0, flex: 1 }}>
-        {/* Filters row: professional dropdown (left), calendar icon (right) */}
-        <div className="flex items-center justify-between w-full mb-10 px-1 relative">
-          {/* Professional selection button */}
-          <button
-            type="button"
-            className="relative flex items-center border rounded-full pl-8 pr-8 py-2 text-sm font-medium text-[#33383C] bg-white focus:outline-none focus:ring-1 focus:ring-[#33383C] transition"
-            style={{
-              minWidth: 160,
-              maxWidth: 260,
-              width: professionalMode === 'perService' ? 'auto' : 180,
-              borderColor: "#d1d5db",
-              display: 'flex',
-              whiteSpace: 'nowrap',
-            }}
-            onClick={() => {
-              if (onOpenProfessionalModal) onOpenProfessionalModal();
-            }}
-          >
-            {/* Profile icon on the left */}
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-              <svg width="20" height="20" fill="none" viewBox="0 0 32 32">
-                <circle cx="16" cy="16" r="14" stroke="#232323" strokeWidth="2" fill="none"/>
-                <ellipse cx="16" cy="20" rx="7" ry="5" fill="#232323" />
-                <circle cx="16" cy="13" r="4" fill="#232323" />
-              </svg>
-            </span>
-            {/* Text in the middle */}
-            <span className="mx-auto flex items-center" style={{ whiteSpace: 'nowrap' }}>
-              {professionalMode === 'perService'
-                ? "Multiple professionals"
-                : getProfessionalName(selectedProfessional)}
-            </span>
-            {/* Down arrow icon on the right */}
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-              <svg width="18" height="18" fill="none" viewBox="0 0 20 20">
-                <path d="M5 8l5 5 5-5" stroke="#232323" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </span>
-          </button>
-          {/* Calendar icon button with circular outline */}
+    <div className="flex w-full min-w-0 max-w-full flex-col overflow-x-hidden">
+        <div className="relative mb-8 flex items-start justify-between gap-3 sm:mb-10 sm:items-center">
+          <h2 className="min-w-0 text-2xl font-semibold leading-tight text-[#0d0d0d] sm:text-[28px] sm:leading-9">Select date and time</h2>
           <button
             ref={calendarIconRef}
             type="button"
-            className="flex items-center justify-center p-2 rounded-full border border-[#d1d5db] bg-white hover:bg-gray-50 transition"
+            className="flex h-12 w-14 shrink-0 items-center justify-center rounded-full border border-[#e5e5e5] bg-white"
             aria-label="Select date from a date picker"
-            style={{
-              width: 40,
-              height: 40,
-              position: "relative",
-              outline: "none", // Remove outline
-              boxShadow: "none", // Remove focus ring
-            }}
-            onMouseDown={e => e.preventDefault()} // Prevent outline on click
+            style={{ outline: "none", boxShadow: "none" }}
+            onMouseDown={e => e.preventDefault()}
             onClick={() => setCalendarOpen(v => !v)}
             tabIndex={0}
           >
-            <svg width="24" height="24" fill="none" viewBox="0 0 32 32">
+            <svg width="22" height="22" fill="none" viewBox="0 0 32 32">
               <path fill="#33383C" fillRule="evenodd" d="M10 2a1 1 0 0 1 1 1v1h10V3a1 1 0 1 1 2 0v1h3a2 2 0 0 1 2 2v20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3V3a1 1 0 0 1 1-1M9 6H6v4h20V6h-3v1a1 1 0 1 1-2 0V6H11v1a1 1 0 1 1-2 0zm17 6H6v14h20z" clipRule="evenodd"></path>
             </svg>
           </button>
@@ -455,7 +421,8 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               id="calendar-modal"
               className="absolute right-0 top-[52px] z-[110] bg-white rounded-2xl border border-[#ededed] p-4"
               style={{
-                minWidth: 320,
+                width: "min(320px, calc(100vw - 2rem))",
+                maxWidth: "calc(100vw - 2rem)",
                 boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
                 fontFamily: interTight.style.fontFamily,
                 outline: "none",
@@ -562,75 +529,88 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
             </div>
           )}
         </div>
-        {/* Month/Year above carousel */}
-        <div className="mb-6 w-full text-lg font-semibold text-[#141414] px-1 select-none">
-          {visibleMonthYear}
-        </div>
-        {/* Days carousel */}
-        <div className="mb-6 w-full min-w-0">
-          <div
-            className="
-              w-full min-w-0
-              overflow-x-auto
-              scrollbar-hide
-              max-w-full
-              md:max-w-[calc(100vw-480px)]
-            "
-            style={{
-              scrollbarWidth: "none",
-              msOverflowStyle: "none",
-            }}
-          >
-            <ul
-              ref={tabListRef}
-              className="flex flex-row flex-nowrap gap-2 min-w-max scrollbar-hide"
-              style={{
-                scrollBehavior: "smooth",
-              }}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-[19px] font-semibold leading-6 text-[#0d0d0d]">Select a date</h3>
+          <div className="flex items-center">
+            <button
+              type="button"
+              aria-label="Previous dates"
+              disabled={!canScrollDatesBack}
+              onClick={() => scrollDates(-1)}
+              className="flex h-8 w-8 items-center justify-center text-[#0d0d0d] disabled:text-[#d4d4d4]"
             >
-              {/* Only render the days in the selected range */}
-              {days.map((d, idx) => (
-                <li key={d.iso} className="px-0">
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M12.5 4.5L7 10l5.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              aria-label="Next dates"
+              disabled={!canScrollDatesForward}
+              onClick={() => scrollDates(1)}
+              className="flex h-8 w-8 items-center justify-center text-[#0d0d0d] disabled:text-[#d4d4d4]"
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M7.5 4.5L13 10l-5.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div
+          ref={dayScrollerRef}
+          onScroll={updateDateScrollEdges}
+          className="mb-6 w-full min-w-0 max-w-full touch-pan-x overflow-x-auto overscroll-x-contain scrollbar-hide"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+          <ul ref={tabListRef} className="flex w-max flex-row flex-nowrap gap-2 pb-1">
+            {days.map((d, idx) => {
+              const isSelected = selectedDayIdx === idx;
+              const isClosed = !prototypeSlots && !availabilityLoading && (mergedAvailability[d.iso] || []).length === 0;
+              return (
+                <li key={d.iso}>
                   <button
-                    className={`flex flex-col items-center px-3 py-2 rounded-lg font-semibold transition-colors min-w-[56px] ${selectedDayIdx === idx ? "bg-[#141414] text-white" : "bg-transparent text-[#141414] hover:bg-[#ededed]"}`}
-                    style={{ fontFamily: interTight.style.fontFamily, boxShadow: "none", border: "none" }}
+                    type="button"
+                    disabled={isClosed}
+                    className={`flex h-[94px] w-16 flex-col items-center justify-center rounded-2xl border py-3 text-center ${
+                      isSelected
+                        ? "border-[#6950F3] bg-[#6950F3] text-white"
+                        : isClosed
+                          ? "cursor-not-allowed border-[#e5e5e5] bg-white text-[#acacac]"
+                          : "border-[#e5e5e5] bg-white text-[#0d0d0d]"
+                    }`}
                     onClick={() => {
                       setSelectedDayIdx(idx);
                       if (setSelectedTime) setSelectedTime(null);
                     }}
                   >
-                    <span className="text-xs mb-1">{d.label}</span>
-                    <span className="text-lg font-bold">{d.day}</span>
+                    <span className="text-sm font-medium leading-5">{d.label}</span>
+                    <span className="text-2xl font-semibold leading-8">{d.day}</span>
+                    <span className="text-[13px] font-normal leading-4">{d.month}</span>
                   </button>
                 </li>
-              ))}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
         </div>
-        {/* Time slots or not available */}
-        {shouldShowMissingEventType ? (
-          <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full text-center text-sm text-[#b91c1c]">
-            <div className="font-semibold text-base text-[#b91c1c]">We couldn’t load availability for this selection.</div>
-            <div>Please check your service configuration or try choosing a different professional.</div>
-          </div>
-        ) : availabilityLoading ? (
+        <h3 className="mb-3 text-[19px] font-semibold leading-6 text-[#0d0d0d]">Pick a time</h3>
+        {availabilityLoading && !prototypeSlots ? (
           <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full text-sm text-[#7B8487]">
             <div className="text-base font-medium text-[#141414]">Loading available times…</div>
             <div>This may take a moment.</div>
           </div>
         ) : times.length > 0 ? (
-          <div className="flex flex-wrap gap-3 mb-8">
+          <div className="mb-8 flex w-full min-w-0 flex-col gap-3">
             {times.map((t) => {
               const isSelected = selectedDateIso === selectedDayIso && selectedTime === t;
-              const isBookable = availableTimesForSelectedDay.includes(t);
+              const isBookable = prototypeSlots || availableTimesForSelectedDay.includes(t);
               const isDisabled = (!isBookable && !isSelected);
-              const label = !isBookable && isSelected ? `${t} (selected)` : t;
-              const baseClasses = "px-4 py-2 rounded-full border font-medium transition-colors";
+              const label = displayTime(t);
+              const baseClasses = "w-full rounded-2xl bg-white px-4 py-4 text-left text-base font-normal leading-snug text-[#0d0d0d]";
               const stateClasses = isSelected
-                ? "bg-[#141414] text-white border-[#141414]"
+                ? "shadow-[inset_0_0_0_2px_#6950F3]"
                 : isBookable
-                  ? "bg-white text-[#141414] border-[#d1d5db] hover:border-[#33383C]"
-                  : "bg-[#f5f5f5] text-[#9ca3af] border-[#e5e7eb]";
+                  ? "shadow-[inset_0_0_0_1px_#e5e5e5]"
+                  : "text-[#acacac] shadow-[inset_0_0_0_1px_#e5e5e5]";
               const disabledClasses = isDisabled && !isSelected ? " opacity-70 cursor-not-allowed" : "";
 
               return (
@@ -659,41 +639,15 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
             </div>
           </div>
         )}
-        {(selectedDate && selectedTime) && (
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-[#f9fafb] border border-[#ededed] rounded-xl px-4 py-3">
-            <div className="flex flex-col text-sm text-[#33383C]">
-              <span className="font-semibold text-[#141414]">Selected slot</span>
-              <span>
-                {selectedDate.toLocaleDateString(undefined, {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-                {selectedTime ? ` at ${selectedTime}` : ''}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="px-4 py-2 rounded-full border font-medium text-[#d32f2f] border-[#f5c7c7] hover:bg-[#fef2f2] transition"
-              onClick={handleCancelSelected}
-              disabled={availabilityLoading}
-            >
-              Clear selection
-            </button>
-          </div>
-        )}
-        {/* Footer actions */}
-        <div className="flex flex-row gap-4 mt-auto w-full">
+        <div className="mt-2">
           <button
             onClick={onBack}
-            className="text-[#33383C] text-sm px-3 py-1 rounded hover:bg-gray-100 transition font-medium"
-            style={{ textDecoration: 'none' }}
+            className="text-sm font-medium text-[#0d0d0d]"
+            style={{ textDecoration: "none" }}
           >
             Back
           </button>
-          {/* Continue button removed */}
         </div>
-      </div>
     </div>
   );
 };

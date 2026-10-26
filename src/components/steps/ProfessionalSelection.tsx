@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { STYLISTS } from "@/lib/stylists";
 
 function ProfessionalSelection({
   onBack,
@@ -16,33 +17,7 @@ function ProfessionalSelection({
   professionalMode?: 'single' | 'perService';
   bookings?: any[];
 }) {
-  const professionals = [
-    {
-      id: 0,
-      name: "Any professional",
-      role: "for maximum availability",
-      avatar: null,
-      isGroup: true,
-    },
-    {
-      id: 1,
-      name: "Banele",
-      role: "Therapist",
-      avatar: "/professionals/banele.jpg",
-    },
-    {
-      id: 2,
-      name: "Dineo",
-      role: "Therapist",
-      avatar: "/professionals/dineo.jpg",
-    },
-    {
-      id: 3,
-      name: "Michelle",
-      role: "Therapist",
-      avatar: "/professionals/michelle.jpg",
-    },
-  ];
+  const professionals = STYLISTS;
 
   // No default selection: do not highlight any card unless selectedProfessional is set
   function handleSelect(id: number) {
@@ -100,8 +75,10 @@ function ProfessionalSelection({
                     </g>
                   </svg>
                 </span>
+              ) : pro.avatar ? (
+                <img src={pro.avatar} alt="" className="w-14 h-14 object-cover" />
               ) : (
-                <img src={pro.avatar!} alt={pro.name} className="w-14 h-14 rounded-full object-cover" />
+                <span className="wf-avatar" aria-hidden="true">{pro.name.replace("Stylist ", "")}</span>
               )}
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-lg text-[#141414] truncate">{pro.name}</div>

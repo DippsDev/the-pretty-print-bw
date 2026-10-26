@@ -1,14 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"], weight: "400" });
+import { HOUSE_RULES } from "@/lib/servicesData";
 
 interface FormState {
-  title: string;
-  firstName: string;
-  lastName: string;
+  name: string;
   email: string;
   phone: string;
   message: string;
@@ -16,162 +12,92 @@ interface FormState {
 
 export function ContactForm() {
   const [form, setForm] = useState<FormState>({
-    title: '',
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    message: '',
+    name: "",
+    email: "",
+    phone: "",
+    message: "",
   });
+  const [sent, setSent] = useState(false);
 
-  const inputStyles = `w-full border-0 border-b border-gray-200 px-0 py-2 bg-white text-[#33383C] 
-    focus:outline-none focus:border-[#33383C] transition-colors 
-    placeholder:text-[#34393D] autofill:shadow-[inset_0_0_0_1000px_white] autofill:text-[#33383C]`;
+  const inputClass = "w-full rounded-lg border border-[#e7e4df] bg-white px-3 py-2 text-sm outline-none";
 
   return (
     <form
-      className={`flex flex-col gap-4 sm:gap-6 w-full max-w-[420px] mx-auto ${inter.className}`}
-      autoComplete="off"
-      onSubmit={e => e.preventDefault()}
+      className="wf-frame flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setSent(true);
+      }}
     >
-      <div className="text-xl sm:text-2xl font-semibold text-[#222222]">Contact us by e-mail</div>
-      <div className="text-xs sm:text-sm text-[#7B8487]">*Required fields</div>
-      
-      <div className="space-y-3 sm:space-y-4">
-        <div className="text-sm sm:text-base font-semibold text-[#222222]">Your information</div>
-        
-        {/* Title select */}
-        <div>
-          <label className="block text-[12px] font-medium text-[#7B8487] mb-1" htmlFor="title">
-            *Title
-          </label>
-          <select
-            id="title"
-            required
-            className={inputStyles + " text-[16px]"}
-            value={form.title}
-            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-          >
-            <option value="" disabled>Mr</option>
-            <option>Mr</option>
-            <option>Ms</option>
-            <option>Mrs</option>
-            <option>Dr</option>
-            <option>Prof</option>
-            <option>Other</option>
-          </select>
-        </div>
-
-        {/* Name inputs */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="flex-1">
-            <input
-              required
-              type="text"
-              placeholder="*First name"
-              className={inputStyles + " text-[16px]"}
-              value={form.firstName}
-              onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
-              autoComplete="off"
-            />
-          </div>
-          <div className="flex-1">
-            <input
-              required
-              type="text"
-              placeholder="*Last name"
-              className={inputStyles + " text-[16px]"}
-              value={form.lastName}
-              onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))}
-              autoComplete="off"
-            />
-          </div>
-        </div>
-
-        {/* Contact inputs */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="flex-1">
-            <input
-              required
-              type="email"
-              placeholder="*Email"
-              className={inputStyles + " text-[16px]"}
-              value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              autoComplete="off"
-            />
-          </div>
-          <div className="flex-1">
-            <input
-              required
-              type="tel"
-              placeholder="*Mobile phone"
-              className={inputStyles + " text-[16px]"}
-              value={form.phone}
-              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              autoComplete="off"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Message area */}
-      <div className="space-y-2 relative">
-        <div className="text-sm sm:text-base font-semibold text-[#222222]">Your request</div>
-        <div className="relative">
-          <textarea
-            required
-            placeholder="*Your message"
-            className={`${inputStyles} min-h-[120px] resize-none text-[16px]`}
-            value={form.message}
-            onChange={e => setForm(f => ({ ...f, message: e.target.value }))}
-            autoComplete="off"
-            style={{ position: "relative", zIndex: 1 }}
-          />
-          {/* Slanted lines in the bottom right corner */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute right-0 bottom-2 flex flex-col items-end z-10"
-            style={{ height: 14, width: 14 }}
-          >
-            <svg width="14" height="14" style={{ display: "block" }}>
-              <line x1="7" y1="14" x2="14" y2="7" stroke="#D1D5DB" strokeWidth="1" />
-              <line x1="0" y1="14" x2="14" y2="0" stroke="#D1D5DB" strokeWidth="1" />
-            </svg>
-          </span>
-        </div>
-      </div>
-
-      <button
-        type="submit"
-        className="mt-3 w-full sm:w-[16rem] bg-[#333333] text-white py-2 rounded-sm text-sm transition hover:bg-neutral-900"
-        style={{ fontFamily: inter.style.fontFamily }}
-      >
+      <h2 className="text-2xl font-semibold">Send a note</h2>
+      <label className="flex flex-col gap-1 text-sm">
+        Name
+        <input
+          required
+          className={inputClass}
+          value={form.name}
+          onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        Email
+        <input
+          required
+          type="email"
+          className={inputClass}
+          value={form.email}
+          onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        Phone
+        <input
+          required
+          type="tel"
+          className={inputClass}
+          value={form.phone}
+          onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+        />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        Message
+        <textarea
+          required
+          className={`${inputClass} min-h-[120px]`}
+          value={form.message}
+          onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))}
+        />
+      </label>
+      <button type="submit" className="wf-btn w-fit">
         Send
       </button>
+      {sent && (
+        <p className="wf-note">
+          Thanks. This preview keeps the note on the page.
+        </p>
+      )}
     </form>
   );
 }
 
 export default function ContactPage() {
   return (
-    <div className={`flex flex-col lg:flex-row min-h-[100dvh] w-full bg-white ${inter.className}`}>
-      {/* Left side */}
-      <div className="flex flex-1 items-center justify-center px-6 py-8 lg:py-12 bg-white">
-        <div className="max-w-md mx-auto">
-          <p className="text-base sm:text-lg text-[#6E6B68] mb-4">
-            Our wellness specialists at Bel Amour Spa would be honored to guide you toward your perfect escape and rejuvenation experience.
+    <div className="wf-page">
+      <p className="wf-label">Contact</p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="wf-frame">
+          <h1 className="text-3xl font-semibold tracking-tight">Talk to the studio</h1>
+          <p className="mt-3 text-sm leading-relaxed text-[#5c5c5c]">
+            Questions about a booking, the policies, or a style that is not on the menu.
           </p>
-          <p className="text-base sm:text-lg text-[#6E6B68] mb-4">
-            Contact us to begin your journey to radiant relaxation.
-          </p>
-          <p className="text-sm text-[#6E6B68]">
-            Available Monday through Sunday 9am-6pm
-          </p>
+          <ul className="mt-6 flex flex-col gap-2">
+            {HOUSE_RULES.map((rule) => (
+              <li key={rule} className="rounded-xl bg-[#f6f5f3] px-3 py-2 text-sm">
+                {rule}
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
-      {/* Right side */}
-      <div className="flex flex-1 items-center justify-center px-6 py-8 lg:py-12 bg-white">
         <ContactForm />
       </div>
     </div>

@@ -4,7 +4,9 @@ import React, { useRef, useState, useEffect } from "react";
 import { Inter_Tight } from "next/font/google";
 import { useSelector, useDispatch } from "react-redux";
 import type { RootState } from "@/redux/store";
-import { SERVICES } from "@/lib/servicesData";
+import { HOUSE_RULES, SERVICES, type ServiceGroup } from "@/lib/servicesData";
+import { STYLISTS, stylistName } from "@/lib/stylists";
+import { useSearchParams } from "next/navigation";
 import ServiceModal from "../../components/modals/Service";
 import ServiceSelectionStep from "../../components/steps/ServiceSelection";
 import ProfessionalSelectionModal from "../../components/modals/ProfessionalSelection";
@@ -19,12 +21,8 @@ import { addBooking, removeBooking, resetBookings } from "../../redux/serviceSli
 import ConfirmStep from "@/components/steps/Confirm";
 import AuthModal from "@/components/modals/Auth";
 import { createClient } from "../../../utils/supabase/client"; // use shared client utility
-import { getCalcomEventInfo, resolveProfessionalKey } from "@/lib/calcom/events";
-import { resolveServiceSlugFromBooking } from "@/lib/calcom/helpers";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
-
-const SERVICE_CATEGORIES = SERVICES.map(s => s.label);
 
 // Supabase client
 const supabase = createClient();
@@ -32,34 +30,60 @@ const supabase = createClient();
 // Main ServicesPage component
 function ServicesPage() {
   const [activeCategory, setActiveCategory] = useState(0);
+  const [groups, setGroups] = useState<ServiceGroup[]>(SERVICES);
+  const serviceCategories = groups.map((group) => group.label);
+  const searchParams = useSearchParams();
   // Listen for currentSection from Redux
   const currentSection = useSelector((state: RootState) => state.navigation.currentSection);
   // When currentSection changes, update activeCategory to match the group/tab
   useEffect(() => {
     if (currentSection) {
-      const idx = SERVICE_CATEGORIES.findIndex(
+      const idx = serviceCategories.findIndex(
         (cat) => cat.toLowerCase() === currentSection.toLowerCase()
       );
       if (idx !== -1 && idx !== activeCategory) {
         setActiveCategory(idx);
         // Optionally scroll to the selected tab
-        if (tabListRef.current) {
-          const tab = tabListRef.current.children[idx] as HTMLElement;
-          if (tab) {
-            tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-          }
+        const list = tabListRef.current;
+        const tab = list?.children[idx] as HTMLElement | undefined;
+        if (list && tab) {
+          const target = tab.offsetLeft - (list.clientWidth - tab.offsetWidth) / 2;
+          list.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
         }
       }
     }
-  }, [currentSection]);
+  }, [currentSection, groups]);
+
+  useEffect(() => {
+    const category = searchParams.get("category");
+    if (!category) return;
+    const idx = serviceCategories.findIndex(
+      (cat) => cat.toLowerCase() === category.toLowerCase()
+    );
+    if (idx !== -1) setActiveCategory(idx);
+  }, [searchParams, groups]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/catalog")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { groups?: ServiceGroup[] } | null) => {
+        if (!cancelled && data?.groups && data.groups.length > 0) setGroups(data.groups);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const tabListRef = useRef<HTMLUListElement>(null);
+  const mobileSheetRef = useRef<HTMLDivElement>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalService, setModalService] = useState<any>(null);
   const dispatch = useDispatch();
   const selectedProfessional = useSelector((state: RootState) => state.professional.selectedProfessional);
   const selectedProfessionals = useSelector((state: RootState) => state.professional.selectedProfessionals);
   const bookings = useSelector((state: RootState) => state.service.bookings);
-  const paymentMethod = useSelector((state: RootState) => state.paymentMethod.selected);
 
   const [step, setStep] = useState<'services' | 'professionals' | 'professionalPerService' | 'time' | 'confirm'>('services');
   // Listen for navigation step from Redux (for chat triggers)
@@ -83,7 +107,35 @@ function ServicesPage() {
   const [user, setUser] = useState<any>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [bookingNotes, setBookingNotes] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [bookingError, setBookingError] = useState("");
+  const [savingBooking, setSavingBooking] = useState(false);
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
+
+  useEffect(() => {
+    const sheet = mobileSheetRef.current;
+    if (bookings.length === 0 || !sheet) {
+      delete document.body.dataset.bookingSheet;
+      document.body.style.removeProperty("--booking-sheet-height");
+      return;
+    }
+    document.body.dataset.bookingSheet = "open";
+    const update = () => {
+      const height = Math.ceil(sheet.getBoundingClientRect().height);
+      document.body.style.setProperty("--booking-sheet-height", `${height}px`);
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(sheet);
+    return () => {
+      observer.disconnect();
+      delete document.body.dataset.bookingSheet;
+      document.body.style.removeProperty("--booking-sheet-height");
+    };
+  }, [bookings.length, mobileSheetExpanded]);
+  const [prototypeBooked, setPrototypeBooked] = useState(false);
   const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -198,22 +250,24 @@ function ServicesPage() {
     };
   }
 
-  // Scroll to the next/previous tab and update activeCategory
+  const scrollTabIntoView = (idx: number) => {
+    const list = tabListRef.current;
+    const tab = list?.children[idx] as HTMLElement | undefined;
+    if (!list || !tab) return;
+    const target = tab.offsetLeft - (list.clientWidth - tab.offsetWidth) / 2;
+    list.scrollTo({ left: Math.max(0, target), behavior: "smooth" });
+  };
+
+  // Slide to the next or previous category and show its services
   const scrollTabs = (dir: "left" | "right") => {
     let newIdx = activeCategory;
     if (dir === "left" && activeCategory > 0) {
       newIdx = activeCategory - 1;
-    } else if (dir === "right" && activeCategory < SERVICE_CATEGORIES.length - 1) {
+    } else if (dir === "right" && activeCategory < serviceCategories.length - 1) {
       newIdx = activeCategory + 1;
     }
     setActiveCategory(newIdx);
-    // Scroll to the selected tab
-    if (tabListRef.current) {
-      const tab = tabListRef.current.children[newIdx] as HTMLElement;
-      if (tab) {
-        tab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      }
-    }
+    scrollTabIntoView(newIdx);
   };
 
   // Add booking handler
@@ -255,193 +309,64 @@ function ServicesPage() {
   function canGoToStep(idx: number) {
     if (idx === 0) return true; // Always can go to services
     if (idx === 1) return bookings.length > 0; // Can go to professionals if bookings exist
-    if (idx === 2) return bookings.length > 0 && selectedProfessional !== null; // Can go to time if professional selected
-    if (idx === 3) return bookings.length > 0 && selectedProfessional !== null && selectedDate && selectedTime; // Can go to confirm if all details are set
+    if (idx === 2) return bookings.length > 0;
+    if (idx === 3) return bookings.length > 0 && !!selectedDate && !!selectedTime;
     return false;
   }
 
-  // Right side continue button logic
   async function handleContinue() {
-    if (bookings.length === 0) return;
-    // Only block continue if user is not logged in at confirm step
+    if (bookings.length === 0 || savingBooking) return;
     if (step === 'time') {
-      if (!user) {
-        setAuthModalOpen(true);
-        return;
-      }
-      // Only allow continue if date and time are selected
-      if (!selectedDate || !selectedTime) {
-        return;
-      }
+      if (!selectedDate || !selectedTime) return;
       setStep('confirm');
       return;
     }
     if (step === 'confirm') {
-        const { data } = await supabase.auth.getUser();
-        const userObj = data?.user;
-        const email = userObj?.email || userObj?.user_metadata?.email;
-
-      if (paymentMethod === "card") {
-        if (!email) {
-          alert("Please update your profile with an email address before paying by card.");
-          return;
-        }
-
-        const bookingSummary = bookings.map(b => ({
-          name: b.name && b.option && !b.name.includes(b.option) ? `${b.name} - ${b.option}` : b.name,
-          option: b.option,
-          time: b.time,
-          price: b.price,
-        }));
-
-        const res = await fetch("/api/yoco/create-checkout", {
+      const name = clientName.trim();
+      const email = clientEmail.trim();
+      if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setBookingError("Add the client name and a valid email before confirming.");
+        return;
+      }
+      if (!selectedDate || !selectedTime) {
+        setBookingError("Choose a date and time first.");
+        return;
+      }
+      setSavingBooking(true);
+      setBookingError("");
+      try {
+        const response = await fetch("/api/bookings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email,
-            total,
-            bookings: bookingSummary,
-            date: selectedDate ? selectedDate.toISOString() : null,
+            clientName: name,
+            clientEmail: email,
+            clientPhone: clientPhone.trim(),
+            date: selectedDate.toISOString(),
             time: selectedTime,
-            notes: bookingNotes || undefined,
+            notes: bookingNotes,
+            total,
+            services: bookings.map((booking, index) => ({
+              name: booking.name,
+              price: booking.price,
+              stylist:
+                professionalMode === "perService"
+                  ? stylistName(selectedProfessionals[index])
+                  : stylistName(selectedProfessional),
+            })),
           }),
         });
-        const result = await res.json();
-        if (result.url) {
-          window.location.assign(result.url);
-        } else {
-          alert("Failed to initiate payment. Please try again.");
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setBookingError(body.error || "The booking could not be saved.");
+          return;
         }
-        return;
+        setPrototypeBooked(true);
+      } catch {
+        setBookingError("The booking could not be saved.");
+      } finally {
+        setSavingBooking(false);
       }
-
-      if (!selectedDate || !selectedTime) {
-        alert("Please choose a date and time before confirming your booking.");
-        return;
-      }
-
-      const primaryBooking = bookings[0];
-      if (!primaryBooking) {
-        alert("We couldn't find a service to book. Please try again.");
-        return;
-      }
-
-      const serviceSlug = resolveServiceSlugFromBooking(primaryBooking);
-      if (!serviceSlug) {
-        alert("This service is not linked to Cal.com yet. Please contact support.");
-        return;
-      }
-
-      const eventInfo = getCalcomEventInfo(serviceSlug);
-      if (!eventInfo) {
-        alert("This service is not linked to Cal.com yet. Please contact support.");
-        return;
-      }
-
-      const professionalIdForBooking = (() => {
-        if (professionalMode === 'perService' && selectedProfessionals) {
-          const perServiceSelection = selectedProfessionals[0];
-          if (typeof perServiceSelection === 'number') {
-            return perServiceSelection;
-          }
-        }
-        return selectedProfessional;
-      })();
-
-      const professionalKey = resolveProfessionalKey(professionalIdForBooking);
-      const eventTypeId = eventInfo.eventTypeIds?.[professionalKey];
-
-      if (!eventTypeId) {
-        alert("We couldn't match an event type for this professional. Please try another selection.");
-        return;
-      }
-
-      if (!email) {
-        alert("Please update your profile with an email address before completing the booking.");
-        return;
-      }
-
-      const bookingDateIso = selectedDate.toISOString().split("T")[0];
-      const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const startDateTime = new Date(selectedDate);
-      const timeMatch = selectedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
-      if (timeMatch) {
-        const [, hourStr, minuteStr, periodStr] = timeMatch;
-        let hours = parseInt(hourStr, 10);
-        const minutes = parseInt(minuteStr, 10);
-        const period = periodStr.toUpperCase();
-        if (period === "PM" && hours !== 12) {
-          hours += 12;
-        } else if (period === "AM" && hours === 12) {
-          hours = 0;
-        }
-        startDateTime.setHours(hours, minutes, 0, 0);
-      }
-      const startIso = startDateTime.toISOString();
-      const customerName =
-        userObj?.user_metadata?.full_name ||
-        userObj?.user_metadata?.name ||
-        email ||
-        "Bel Amour Guest";
-
-      const response = await fetch("/api/calcom/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventTypeId,
-          start: startIso,
-          date: bookingDateIso,
-          time: selectedTime,
-          timeZone: localTimeZone,
-          durationMinutes: eventInfo.durationMinutes,
-          service: {
-            name: primaryBooking.name,
-            option: primaryBooking.option,
-            slug: serviceSlug,
-          },
-          professional: {
-            id: professionalIdForBooking ?? 0,
-            name: getProfessionalName(professionalIdForBooking),
-          },
-          customer: {
-            name: customerName,
-            email,
-            timeZone: localTimeZone,
-          },
-          notes: bookingNotes || undefined,
-          metadata: {
-            paymentMethod: paymentMethod || "venue",
-            total,
-            bookingOption: primaryBooking.option,
-            bookingPrice: primaryBooking.price,
-            ...primaryBooking.metadata,
-          },
-        }),
-      });
-
-      const result = await response.json();
-      if (!response.ok || !result?.success) {
-        const message = result?.error || result?.message || "Failed to create booking.";
-        alert(message);
-        return;
-      }
-
-      const bookingReference = result.booking?.uid || result.booking?.id;
-      alert(
-        bookingReference
-          ? `Booking confirmed! Your reference is ${bookingReference}. We’ll see you soon.`
-          : "Booking confirmed! We’ll see you soon."
-      );
-
-      dispatch(resetBookings());
-      dispatch(resetProfessionals());
-      setSelectedDate(null);
-      setSelectedTime(null);
-      setBookingNotes("");
-      setProfessionalMode('single');
-      setProfessionalModalOpen(false);
-      setPerServiceModalOpen(false);
-      setStep('services');
       return;
     }
     if (step === 'services') setStep('professionals');
@@ -462,14 +387,7 @@ function ServicesPage() {
 
   // Helper to get professional name by id
   function getProfessionalName(id: number | undefined) {
-    if (id === undefined) return "Any professional";
-    const professionals = [
-      { id: 0, name: "Any professional" },
-      { id: 1, name: "Banele" },
-      { id: 2, name: "Dineo" },
-      { id: 3, name: "Michelle" },
-    ];
-    return professionals.find(p => p.id === id)?.name || "Any professional";
+    return stylistName(id);
   }
 
   // Handler for professional dropdown in TimeSelection
@@ -494,7 +412,7 @@ function ServicesPage() {
   }
 
   return (
-    <div className={`relative w-full min-h-[100dvh] bg-white ${interTight.className}`} style={{overflowY: 'auto', maxHeight: '100dvh'}}>
+    <div className={`relative w-full ${interTight.className}`}>
       {/* Profile icon top right */}
       {user && (
         <div className="fixed top-6 right-4 sm:right-8 z-[201]">
@@ -538,15 +456,15 @@ function ServicesPage() {
           )}
         </div>
       )}
-      <div className="flex flex-col lg:flex-row w-full min-h-[100dvh]">
+      <div className="flex w-full min-w-0 flex-col bg-[#f5f5f5] min-h-[100dvh] lg:flex-row lg:items-start lg:justify-center lg:gap-8 lg:px-10 lg:pt-16">
         {/* Main content (left side + center) */}
-        <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 pb-24 lg:pb-8">
+        <div className="flex min-w-0 w-full flex-1 flex-col overflow-x-hidden px-4 pt-16 pb-48 sm:px-6 lg:max-w-[680px] lg:flex-none lg:px-0 lg:pt-0 lg:pb-16">
           {/* Progress tracker */}
-          <div className="w-full flex mb-4 sm:mb-6 lg:mb-8 mt-12 sm:mt-14 lg:mt-16 overflow-x-auto">
-            <ul className="flex flex-row gap-0 items-center pl-1 min-w-max">
+          <div className="mb-6 flex w-full overflow-x-auto">
+            <ul className="flex min-w-max flex-row items-center gap-0">
               {[
                 { label: 'Services' },
-                { label: 'Professional' },
+                { label: 'Stylist' },
                 { label: 'Time' },
                 { label: 'Confirm' },
               ].map((stepObj, idx) => (
@@ -555,7 +473,8 @@ function ServicesPage() {
                     className={`font-medium text-xs sm:text-sm whitespace-nowrap transition-colors px-0 bg-transparent border-none outline-none ${
                       step === 'services' && idx === 0 ||
                       step === 'professionals' && idx === 1 ||
-                      step === 'time' && idx === 2
+                      step === 'time' && idx === 2 ||
+                      step === 'confirm' && idx === 3
                         ? 'text-[#141414]'
                         : canGoToStep(idx) ? 'text-[#7B8487] hover:text-[#232323] cursor-pointer' : 'text-[#d1d5db] cursor-not-allowed'
                     }`}
@@ -566,23 +485,54 @@ function ServicesPage() {
                       if (idx === 0) setStep('services');
                       if (idx === 1) setStep('professionals');
                       if (idx === 2) setStep('time');
-                      // Confirm step not implemented
+                      if (idx === 3) setStep('confirm');
                     }}
                     type="button"
                   >
                     {stepObj.label}
                   </button>
                   {idx < 3 && (
-                    <span className="mx-1 sm:mx-2" aria-hidden="true">
-                      <svg fill="currentColor" width="16" height="16" viewBox="0 0 32 32" className="sm:w-[18px] sm:h-[18px]"><path fillRule="evenodd" d="M19.957 9.043a1 1 0 0 1 0 1.414L14.414 16l5.543 5.543a1 1 0 0 1-1.414 1.414l-6.25-6.25a1 1 0 0 1 0-1.414l6.25-6.25a1 1 0 0 1 1.414 0" clipRule="evenodd"></path></svg>
-                    </span>
+                  <span className="mx-1 text-[#c4c4c4] sm:mx-2" aria-hidden="true">
+                    <svg fill="currentColor" width="14" height="14" viewBox="0 0 32 32" className="sm:h-[16px] sm:w-[16px]"><path fillRule="evenodd" d="M12.293 9.043a1 1 0 0 1 1.414 0l6.25 6.25a1 1 0 0 1 0 1.414l-6.25 6.25a1 1 0 0 1-1.414-1.414L17.836 16l-5.543-5.543a1 1 0 0 1 0-1.414" clipRule="evenodd"></path></svg>
+                  </span>
                   )}
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Main content for step */}
+          {prototypeBooked ? (
+            <div className="wf-frame max-w-xl">
+              <p className="wf-kicker">Confirmed</p>
+              <h2 className="text-2xl font-semibold">Booking received</h2>
+              <p className="mt-2 text-sm text-[#5c5c5c]">
+                The studio has this booking.
+              </p>
+              <ul className="mt-4 flex flex-col gap-2">
+                {bookings.map((booking, index) => (
+                  <li key={`${booking.name}-${index}`} className="flex justify-between gap-4 border-t border-[#e5e5e5] pt-2 text-sm">
+                    <span>{booking.name}</span>
+                    <span>{booking.price}</span>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className="wf-btn mt-6"
+                onClick={() => {
+                  dispatch(resetBookings());
+                  dispatch(resetProfessionals());
+                  setSelectedDate(null);
+                  setSelectedTime(null);
+                  setBookingNotes("");
+                  setPrototypeBooked(false);
+                  setStep("services");
+                }}
+              >
+                Start another booking
+              </button>
+            </div>
+          ) : (
           <AnimatePresence mode="wait">
             {step === 'services' && (
               <motion.div
@@ -593,17 +543,25 @@ function ServicesPage() {
                 transition={{ duration: 0.22, ease: "easeOut" }}
                 className="flex flex-col gap-4"
               >
+                <p className="wf-note">
+                  Choose a style. Prices are in pula.
+                </p>
+                <ul className="flex flex-col gap-1 rounded-2xl bg-white px-4 py-3 text-sm leading-snug text-[#555]">
+                  {HOUSE_RULES.map((rule) => (
+                    <li key={rule}>{rule}</li>
+                  ))}
+                </ul>
                 {/* Category carousel */}
                 <div className="relative mb-4 sm:mb-6 lg:mb-8">
                   <div className="flex items-center">
                     <ul
                       ref={tabListRef}
                       role="tablist"
-                      className="flex gap-2 overflow-x-auto scrollbar-hide flex-1"
-                      style={{ scrollBehavior: "smooth", minWidth: 0 }}
+                      className="flex min-w-0 flex-1 flex-nowrap gap-2 overflow-x-auto overscroll-x-contain touch-pan-x scrollbar-hide"
+                      style={{ scrollBehavior: "smooth" }}
                     >
-                      {SERVICE_CATEGORIES.map((cat, idx) => (
-                        <li key={cat} role="tab" aria-selected={activeCategory === idx}>
+                      {serviceCategories.map((cat, idx) => (
+                        <li key={cat} role="tab" aria-selected={activeCategory === idx} className="shrink-0">
                           <button
                             className={`
                               px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-base font-semibold whitespace-nowrap transition-colors
@@ -616,14 +574,17 @@ function ServicesPage() {
                               boxShadow: "none",
                               border: "none",
                             }}
-                            onClick={() => setActiveCategory(idx)}
+                            onClick={() => {
+                              setActiveCategory(idx);
+                              scrollTabIntoView(idx);
+                            }}
                           >
                             {cat}
                           </button>
                         </li>
                       ))}
                     </ul>
-                    <div className="hidden sm:flex gap-1 ml-2 items-center">
+                    <div className="flex shrink-0 gap-1 ml-2 items-center">
                       <button
                         className="p-0 disabled:opacity-40 flex items-center justify-center hover:opacity-80"
                         style={{ background: "none", border: "none", boxShadow: "none", width: 32, height: 32 }}
@@ -642,7 +603,7 @@ function ServicesPage() {
                         style={{ background: "none", border: "none", boxShadow: "none", width: 32, height: 32 }}
                         onClick={() => scrollTabs("right")}
                         aria-label="Scroll right"
-                        disabled={activeCategory === SERVICE_CATEGORIES.length - 1}
+                        disabled={activeCategory === serviceCategories.length - 1}
                         type="button"
                       >
                         {/* Right arrow SVG */}
@@ -655,9 +616,9 @@ function ServicesPage() {
                 </div>
                 {/* Services under selected category */}
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-[#141414]">{SERVICE_CATEGORIES[activeCategory]}</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-[#141414]">{groups[activeCategory]?.label}</h2>
                   <ServiceSelectionStep
-                    services={[SERVICES[activeCategory]]}
+                    services={groups[activeCategory] ? [groups[activeCategory]] : []}
                     onSelectService={svc => {
                       setModalService(getServiceModalData(svc));
                       setModalOpen(true);
@@ -675,7 +636,7 @@ function ServicesPage() {
                 transition={{ duration: 0.22, ease: "easeOut" }}
                 className="flex flex-col gap-4 sm:gap-6 flex-1"
               >
-                <h2 className="text-xl sm:text-2xl font-bold mb-2 text-[#141414]">Select Professional</h2>
+                <h2 className="text-xl sm:text-2xl font-bold mb-2 text-[#141414]">Select stylist</h2>
                 <ProfessionalSelection
                   onBack={() => setStep('services')}
                   onSelect={id => {
@@ -720,10 +681,9 @@ function ServicesPage() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 40 }}
                 transition={{ duration: 0.22, ease: "easeOut" }}
-                className="flex flex-col gap-4 sm:gap-6 flex-1"
+                className="flex min-w-0 w-full max-w-full flex-1 flex-col"
               >
-                <div className="flex flex-col gap-4 sm:gap-6 flex-1">
-                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-2 text-[#141414]">Select time</h2>
+                <div className="flex min-w-0 w-full max-w-full flex-1 flex-col">
                   <TimeSelectionModal
                     onBack={() => { setProfessionalMode('single'); setStep('professionals'); }}
                     onContinue={handleTimeSelection}
@@ -760,111 +720,87 @@ function ServicesPage() {
                   onBack={() => setStep('time')}
                   bookingNotes={bookingNotes}
                   onBookingNotesChange={setBookingNotes}
+                  clientName={clientName}
+                  clientEmail={clientEmail}
+                  clientPhone={clientPhone}
+                  onClientNameChange={setClientName}
+                  onClientEmailChange={setClientEmail}
+                  onClientPhoneChange={setClientPhone}
+                  bookingError={bookingError}
                 />
               </motion.div>
             )}
           </AnimatePresence>
+          )}
         </div>
-        {/* Right: Summary box as card, fixed position on desktop, bottom sheet on mobile */}
-        <div className="hidden lg:flex lg:flex-col items-center py-8 px-6" style={{width: 380, minWidth: 380, maxWidth: 380, height: '100dvh', position: 'sticky', top: 0, right: 0, zIndex: 10}}>
-          <div className="w-full max-w-xs mx-auto bg-white rounded-2xl border p-6 mt-16 flex flex-col gap-6" style={{maxHeight: 'calc(100vh - 48px)', minHeight: 0, display: 'flex'}}>
-            {/* Title */}
-            <div className="flex flex-col gap-1">
-              <span className="text-lg font-bold text-[#141414] tracking-tight truncate">Booking Summary</span>
-              <hr className="my-2 border-[#ededed]" />
+        {/* Right: Summary box sticks with the page on desktop, bottom sheet on mobile */}
+        <div className="hidden w-[360px] shrink-0 lg:sticky lg:top-6 lg:block lg:self-start">
+          <div className="flex min-h-[560px] flex-col rounded-2xl bg-white p-6 shadow-[0_8px_28px_rgba(0,0,0,0.06)]">
+            <div className="mb-6">
+              <div className="text-base font-semibold text-[#141414]">thePRETTYPRINT</div>
+              <p className="mt-0.5 text-sm text-[#7B8487]">Hair studio</p>
             </div>
-            {/* Date & Time summary below "Your booking" */}
-            {(selectedDate && selectedTime) && (
-              <div className="flex flex-col gap-3 mb-2">
-                <div className="flex flex-row items-center gap-2">
-                  {/* Calendar icon */}
-                  <span aria-hidden="true">
-                    <svg width="20" height="20" fill="#7B8487" viewBox="0 0 32 32">
-                      <path fillRule="evenodd" d="M10 2a1 1 0 0 1 1 1v1h10V3a1 1 0 1 1 2 0v1h3a2 2 0 0 1 2 2v20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3V3a1 1 0 0 1 1-1M9 6H6v4h20V6h-3v1a1 1 0 1 1-2 0V6H11v1a1 1 0 1 1-2 0zm17 6H6v14h20z" clipRule="evenodd"></path>
-                    </svg>
-                  </span>
-                  <p className="text-sm text-[#232323] font-medium">
-                    {selectedDate.toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
-                  </p>
-                </div>
-                <div className="flex flex-row items-center gap-2">
-                  {/* Clock icon */}
-                  <span aria-hidden="true">
-                    <svg width="20" height="20" fill="#7B8487" viewBox="0 0 32 32">
-                      <path fillRule="evenodd" d="M16 5C9.925 5 5 9.925 5 16s4.925 11 11 11 11-4.925 11-11S22.075 5 16 5M3 16C3 8.82 8.82 3 16 3s13 5.82 13 13-5.82 13-13 13S3 23.18 3 16m13-8a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-7a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1" clipRule="evenodd"></path>
-                    </svg>
-                  </span>
-                  <p className="text-sm text-[#232323] font-medium">{selectedTime}</p>
-                </div>
-              </div>
-            )}
-            {/* Show bookings */}
-            <div className="flex-1 flex flex-col gap-2 min-h-0">
+            <div className="flex flex-col gap-4">
               {bookings.length === 0 ? (
                 <div className="text-sm text-[#7B8487]">No services selected</div>
               ) : (
-                <>
-                  <div className="text-sm text-[#7B8487] mb-1">Your booking:</div>
-                  <ul className="flex flex-col gap-2 mb-2 overflow-y-auto" style={{maxHeight: '180px'}}>
-                    {bookings.map((b, i) => (
-                      <li key={i} className="flex flex-row items-center gap-2 bg-[#fafbfc] rounded-lg px-3 py-2">
-                        <div className="flex flex-col items-start gap-0.5 flex-1 min-w-0">
-                          <span className="text-[#141414] font-medium text-sm truncate max-w-[140px]" title={b.option}>{b.name}</span>
-                          <span className="text-xs text-[#232323]/70">{b.time}</span>
-                          {/* Professional name below time, always up to date */}
-                          <span className="text-xs text-[#33383C] mt-1">
-                            {professionalMode === "perService"
-                              ? getProfessionalName(selectedProfessionals[i])
-                              : getProfessionalName(selectedProfessional)
-                            }
-                          </span>
-                        </div>
-                        <span className="font-semibold text-[#232323] text-sm text-right" style={{minWidth: 64, display: 'inline-block'}}>{b.price}</span>
-                        <button
-                          type="button"
-                          aria-label="Remove booking"
-                          className="p-1 rounded-full hover:bg-gray-200 focus:outline-none"
-                          onClick={() => handleRemoveBooking(i)}
-                          style={{ lineHeight: 0 }}
-                        >
-                          {/* X SVG */}
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M4.8 4.8l6.4 6.4M11.2 4.8l-6.4 6.4" stroke="#33383C" strokeWidth="1.5" strokeLinecap="round"/>
-                          </svg>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
+                bookings.map((b, i) => (
+                  <div key={i} className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[15px] font-medium text-[#141414]">{b.name}</div>
+                      <div className="mt-1 text-sm text-[#7B8487]">
+                        {[b.time, professionalMode === "perService" ? getProfessionalName(selectedProfessionals[i]) : getProfessionalName(selectedProfessional)].filter(Boolean).join(" · ")}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="whitespace-nowrap text-[15px] font-medium text-[#141414]">{b.price}</span>
+                      <button
+                        type="button"
+                        aria-label="Remove booking"
+                        className="rounded-full p-1 hover:bg-[#f3f3f3]"
+                        onClick={() => handleRemoveBooking(i)}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path d="M4.8 4.8l6.4 6.4M11.2 4.8l-6.4 6.4" stroke="#7B8487" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
-            <div className="flex flex-row items-center justify-between border-t border-[#ededed] pt-4 mt-2">
-              <span className="font-semibold text-[#141414] text-base">Total</span>
-              <span className="font-semibold text-[#232323] text-base">
-                {total > 0 ? `ZAR ${total.toFixed(2)}` : "free"}
+            <div className="mt-5 flex items-center justify-between border-t border-[#ededed] pt-4">
+              <span className="font-semibold text-[#141414]">Total</span>
+              <span className="font-semibold text-[#141414]">
+                {total > 0 ? `P${Number.isInteger(total) ? total.toFixed(0) : total.toFixed(2)}` : "Free"}
               </span>
             </div>
+            {(selectedDate && selectedTime) && (
+              <p className="mt-3 text-sm text-[#7B8487]">
+                {selectedDate.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+                {selectedTime ? ` · ${selectedTime}` : ""}
+              </p>
+            )}
             <button
-              className={`py-2 px-8 rounded-full font-semibold text-base mt-2 ${
-                bookings.length > 0 &&
+              className={`mt-auto w-full rounded-full py-3.5 text-base font-semibold ${
+                bookings.length > 0 && !prototypeBooked &&
                 (
                   (step !== 'time' && step !== 'confirm') ||
                   (step === 'time' && selectedDate && selectedTime) ||
                   (step === 'confirm')
                 )
-                  ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]"
-                  : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                  ? "bg-[#141414] text-white hover:bg-[#000]"
+                  : "cursor-not-allowed bg-[#d5d5d5] text-white"
               }`}
-              style={{ width: 'auto', alignSelf: 'flex-end' }}
               disabled={
+                savingBooking ||
+                prototypeBooked ||
                 bookings.length === 0 ||
                 (step === 'time' && (!selectedDate || !selectedTime))
               }
               onClick={handleContinue}
             >
-              {step === 'confirm' && paymentMethod === "card"
-                ? "Confirm & Pay"
-                : "Continue"}
+              {savingBooking ? "Saving…" : prototypeBooked ? "Booked" : step === 'confirm' ? "Confirm booking" : "Continue"}
             </button>
           </div>
         </div>
@@ -878,6 +814,7 @@ function ServicesPage() {
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              ref={mobileSheetRef}
               className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-[#ededed] shadow-2xl z-[100] safe-area-inset-bottom"
               style={{ maxHeight: mobileSheetExpanded ? '70vh' : 'auto' }}
             >
@@ -889,7 +826,7 @@ function ServicesPage() {
                 <div className="flex flex-col items-start min-w-0">
                   <span className="text-xs text-[#7B8487]">{bookings.length} {bookings.length === 1 ? 'service' : 'services'}</span>
                   <span className="font-semibold text-[#232323] text-base truncate">
-                    {total > 0 ? `ZAR ${total.toFixed(2)}` : "free"}
+                    {total > 0 ? `P${Number.isInteger(total) ? total.toFixed(0) : total.toFixed(2)}` : "Free"}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1000,7 +937,7 @@ function ServicesPage() {
                       <div className="flex items-center justify-between pt-3 border-t border-[#ededed]">
                         <span className="font-semibold text-[#141414] text-base">Total</span>
                         <span className="font-semibold text-[#232323] text-base">
-                          {total > 0 ? `ZAR ${total.toFixed(2)}` : "free"}
+                          {total > 0 ? `P${Number.isInteger(total) ? total.toFixed(0) : total.toFixed(2)}` : "Free"}
                         </span>
                       </div>
                     </div>
@@ -1012,7 +949,7 @@ function ServicesPage() {
               <div className="px-4 py-4 border-t border-[#ededed]">
                 <button
                   className={`w-full py-3 rounded-full font-semibold text-base ${
-                    bookings.length > 0 &&
+                    bookings.length > 0 && !prototypeBooked &&
                     (
                       (step !== 'time' && step !== 'confirm') ||
                       (step === 'time' && selectedDate && selectedTime) ||
@@ -1022,14 +959,14 @@ function ServicesPage() {
                       : "bg-gray-300 text-gray-600 cursor-not-allowed"
                   }`}
                   disabled={
+                    savingBooking ||
+                    prototypeBooked ||
                     bookings.length === 0 ||
                     (step === 'time' && (!selectedDate || !selectedTime))
                   }
                   onClick={handleContinue}
                 >
-                  {step === 'confirm' && paymentMethod === "card"
-                    ? "Confirm & Pay"
-                    : "Continue"}
+                  {savingBooking ? "Saving…" : prototypeBooked ? "Booked" : step === "confirm" ? "Confirm booking" : "Continue"}
                 </button>
               </div>
             </motion.div>
@@ -1066,33 +1003,7 @@ function ServicesPage() {
               setProfessionalModalOpen(false);
               setActiveProfessionalIdx(null);
             }}
-            professionals={[
-              {
-                id: 0,
-                name: "Any professional",
-                role: "for maximum availability",
-                avatar: null,
-                isGroup: true,
-              },
-              {
-                id: 1,
-                name: "Banele",
-                role: "Therapist",
-                avatar: "/professionals/banele.jpg",
-              },
-              {
-                id: 2,
-                name: "Dineo",
-                role: "Therapist",
-                avatar: "/professionals/dineo.jpg",
-              },
-              {
-                id: 3,
-                name: "Michelle",
-                role: "Therapist",
-                avatar: "/professionals/michelle.jpg",
-              },
-            ]}
+            professionals={STYLISTS}
           />
         )}
       </AnimatePresence>

@@ -20,6 +20,18 @@ import { SERVICES } from "@/lib/servicesData";
 
 const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
+function MenuLottieIcon({ lottieRef }: { lottieRef: React.RefObject<LottieRefCurrentProps | null> }) {
+  return (
+    <Lottie
+      lottieRef={lottieRef}
+      animationData={menuIconAnimation}
+      loop={false}
+      autoplay={false}
+      className="w-6 h-6"
+    />
+  );
+}
+
 const fsBrabo = localFont({
   src: [
     {
@@ -68,6 +80,7 @@ const Navbar = () => {
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const dispatch = useDispatch();
   const navRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const lottieRef = useRef<LottieRefCurrentProps>(null);
 
   // On mount, set to hamburger (frame 0)
@@ -88,25 +101,31 @@ const Navbar = () => {
     }
   }, [isOpen]);
 
-  // Lottie menu icon (controlled by ref, no key, no initialSegment)
-  const MenuLottieIcon = () => (
-    <Lottie
-      lottieRef={lottieRef}
-      animationData={menuIconAnimation}
-      loop={false}
-      autoplay={false}
-      className="w-6 h-6"
-    />
-  );
+  const menuItems = ['Home', 'Services', 'Admin'];
+  const [menuServices, setMenuServices] = React.useState(SERVICES);
 
-  // Remove "Home" from menuItems
-  const menuItems = ['Services'];
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/catalog")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.groups) && data.groups.length) {
+          setMenuServices(data.groups);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Handler for clicking outside nav
   React.useEffect(() => {
     if (!isOpen) return;
     const handleClick = (e: MouseEvent) => {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (menuButtonRef.current?.contains(target)) return;
+      if (navRef.current && !navRef.current.contains(target)) {
         dispatch(setNavbarOpen(false));
         setServicesOpen(false);
       }
@@ -150,17 +169,19 @@ const Navbar = () => {
       selectedService !== null &&
       selectedPackage !== null
     ) {
+      const group = menuServices[selectedService];
+      if (!group) return;
       dispatch(
         setServiceSelection({
-          service: SERVICES[selectedService].label,
-          pkg: SERVICES[selectedService].services[selectedPackage],
+          service: group.label,
+          pkg: group.services[selectedPackage],
         } as any)
       );
       router.push('/book');
       dispatch(setNavbarOpen(false));
       setServicesOpen(false);
     }
-  }, [servicesOpen, selectedService, selectedPackage, dispatch, router]);
+  }, [servicesOpen, selectedService, selectedPackage, dispatch, router, menuServices]);
 
   // Show first service by default when opening services panel
   React.useEffect(() => {
@@ -174,6 +195,7 @@ const Navbar = () => {
     <>
       {/* Menu icon: Lottie animation */}
       <button
+        ref={menuButtonRef}
         onClick={() => {
           if (isOpen) {
             dispatch(setNavbarOpen(false));
@@ -186,7 +208,7 @@ const Navbar = () => {
         className="fixed top-6 left-4 sm:left-6 z-[91] p-0 m-0 bg-transparent border-none outline-none w-6 h-6"
         aria-label="Open navigation"
       >
-        <MenuLottieIcon />
+        <MenuLottieIcon lottieRef={lottieRef} />
       </button>
       <div
         className={`fixed left-4 sm:left-6 z-[91] top-[56px] h-[1px] bg-white/60
@@ -224,8 +246,18 @@ const Navbar = () => {
                     onMouseEnter={() => setHoveredItem(item)}
                     onMouseLeave={() => setHoveredItem(null)}
                     onClick={() => {
+                      if (item === 'Home') {
+                        router.push('/');
+                        dispatch(setNavbarOpen(false));
+                        return;
+                      }
                       if (item === 'Services') {
                         setServicesOpen(true);
+                        return;
+                      }
+                      if (item === 'Admin') {
+                        router.push('/admin');
+                        dispatch(setNavbarOpen(false));
                       }
                     }}
                     className={`menu-item ml-4 text-sm font-medium flex items-center gap-2 w-full justify-between ${interTight.className} ${
@@ -272,7 +304,7 @@ const Navbar = () => {
                       <span>Services</span>
                     </button>
                     <div className="w-full h-[1px] bg-gray-200 mb-2" />
-                    {SERVICES.map((s, idx) => (
+                    {menuServices.map((s, idx) => (
                       <button
                         key={s.label}
                         onClick={() => {
@@ -302,9 +334,9 @@ const Navbar = () => {
                     ))}
                   </div>
                   {/* Second column: Packages */}
-                  {selectedService !== null && !SERVICES[selectedService].prices && (
+                  {selectedService !== null && menuServices[selectedService] && !menuServices[selectedService].prices && (
                     <div className="flex flex-col min-w-[180px] max-w-[180px] flex-shrink-0">
-                      {SERVICES[selectedService].services.map((item: any, i: number) => (
+                      {menuServices[selectedService].services.map((item: any, i: number) => (
                         <button
                           key={item.name}
                           onClick={() => {
@@ -330,7 +362,11 @@ const Navbar = () => {
           </div>
           <div className={`w-full transition-opacity duration-300 ease-in-out ${servicesOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
             <button
-              onClick={() => router.push('/contact')}
+              onClick={() => {
+                router.push('/contact');
+                dispatch(setNavbarOpen(false));
+                setServicesOpen(false);
+              }}
               className={contactBtn + ` transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
             >
               Contact

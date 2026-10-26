@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# studio records hold client details
+/data/studio.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

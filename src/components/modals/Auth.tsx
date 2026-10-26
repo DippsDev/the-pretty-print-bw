@@ -566,7 +566,7 @@ export default function AuthModal({
                               disabled={loading}
                             />
                             <label htmlFor="marketing" className="text-sm text-[#232323]">
-                              I want to receive news, offers and marketing emails from Bel Amour.
+                              I want to receive news, offers and marketing emails from thePRETTYPRINT.
                             </label>
                           </div>
                           <button

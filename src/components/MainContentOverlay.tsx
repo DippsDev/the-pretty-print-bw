@@ -5,6 +5,7 @@ import { useSelector, useDispatch } from "react-redux";
 import type { RootState } from "@/redux/store";
 import { setNavbarOpen } from "@/redux/features/navigationSlice";
 import localFont from "next/font/local";
+import PageTransition from "@/components/PageTransition";
 
 const fsBrabo = localFont({
   src: [
@@ -34,7 +35,7 @@ export default function MainContentOverlay({ children }: { children: React.React
 
   return (
     <>
-      {/* Blur/dark overlay on everything except the navbar and bird */}
+      {/* Blur/dark overlay on everything except the navbar */}
       <div
         className={`fixed inset-0 z-[89] pointer-events-none transition-all duration-500 ease-[cubic-bezier(.4,0,.2,1)] ${
           navbarOpen
@@ -45,7 +46,9 @@ export default function MainContentOverlay({ children }: { children: React.React
         aria-hidden="true"
       />
       {/* Main content, always visible, but under the overlay */}
-      <div className={`relative z-0 ${fsBrabo.className}`}>{children}</div>
+      <div className={`relative z-[20] ${fsBrabo.className}`}>
+        <PageTransition>{children}</PageTransition>
+      </div>
     </>
   );
 }

@@ -1,34 +1,9 @@
 import React, { useState } from "react";
-import ProfessionalSelectionModal, { Professional } from "./ProfessionalSelection";
+import ProfessionalSelectionModal from "./ProfessionalSelection";
 import { motion, AnimatePresence } from "framer-motion";
+import { STYLISTS } from "@/lib/stylists";
 
-const professionals: Professional[] = [
-	{
-		id: 0,
-		name: "Any professional",
-		role: "for maximum availability",
-		avatar: null,
-		isGroup: true,
-	},
-	{
-		id: 1,
-		name: "Banele",
-		role: "Therapist",
-		avatar: "/professionals/banele.jpg",
-	},
-	{
-		id: 2,
-		name: "Dineo",
-		role: "Therapist",
-		avatar: "/professionals/dineo.jpg",
-	},
-	{
-		id: 3,
-		name: "Michelle",
-		role: "Therapist",
-		avatar: "/professionals/michelle.jpg",
-	},
-];
+const professionals = STYLISTS;
 
 export default function ProfessionalPerServiceModal({
 	open,

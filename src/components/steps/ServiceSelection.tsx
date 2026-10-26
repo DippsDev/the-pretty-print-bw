@@ -20,11 +20,8 @@ interface ServiceSelectionStepProps {
   onSelectService: (service: any) => void;
 }
 
-function isPackageGroup(group: { label: string; services: Service[] }) {
-  // Heuristic: if all services have type "package" or label includes "Package"
-  if (group.label.toLowerCase().includes("package")) return true;
-  if (group.services.length === 0) return false;
-  return group.services.every(s => s.type === "package");
+function isPackageGroup(group: { label: string; services: Service[]; prices?: unknown }) {
+  return Array.isArray(group.prices) && group.prices.length > 0;
 }
 
 export default function ServiceSelectionStep({ services, onSelectService }: ServiceSelectionStepProps) {
@@ -36,7 +33,7 @@ export default function ServiceSelectionStep({ services, onSelectService }: Serv
           return (
             <div
               key={group.label}
-              className="border rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-gray-50 transition"
+              className="border border-dashed border-[#9a9a9a] rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-[#fafafa] transition"
               onClick={() => onSelectService(group)}
             >
               <div className="font-semibold text-base sm:text-lg text-[#141414]">{group.label}</div>
@@ -71,12 +68,15 @@ export default function ServiceSelectionStep({ services, onSelectService }: Serv
         return group.services.map((svc, j) => (
           <div
             key={svc.name}
-            className="border rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-gray-50 transition"
+            className="border border-dashed border-[#9a9a9a] rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-[#fafafa] transition"
             onClick={() => onSelectService(svc)}
           >
             <div className="font-semibold text-base sm:text-lg text-[#141414]">{svc.name}</div>
             {svc.description && (
               <div className="text-sm text-[#7B8487] mt-1">{svc.description}</div>
+            )}
+            {svc.timeOptions && svc.timeOptions.length > 0 && (
+              <div className="text-xs uppercase tracking-wide text-[#888]">{svc.timeOptions[0]}</div>
             )}
             {svc.price && (
               <div className="text-sm text-[#232323] font-normal mt-1">

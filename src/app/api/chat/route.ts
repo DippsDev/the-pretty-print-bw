@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { openai } from '@ai-sdk/openai';
 import { streamText, tool, convertToModelMessages, UIMessage, createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import { z } from 'zod';
-import { SERVICES } from '@/lib/servicesData';
+import { readGroups } from '@/lib/studioStore';
 import { getBookingStatus } from '@/lib/chat/bookingStatus';
 
 // Helper function to resolve service and price
 function resolveServiceAndPrice(serviceName: string, packageName?: string) {
+  const SERVICES = readGroups();
   const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const target = normalize(serviceName);
 
@@ -41,6 +42,7 @@ function resolveServiceAndPrice(serviceName: string, packageName?: string) {
 
 // Main chat endpoint using AI SDK tools
 export async function POST(request: NextRequest) {
+  const SERVICES = readGroups();
   try {
     const { messages }: { messages: UIMessage[] } = await request.json();
 

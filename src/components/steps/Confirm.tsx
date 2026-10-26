@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/redux/store";
 import PaymentMethodModal from "../modals/PaymentMethod";
+import { stylistName } from "@/lib/stylists";
 
 export default function ConfirmStep({
   bookings,
@@ -15,6 +16,13 @@ export default function ConfirmStep({
   onBack,
   bookingNotes,
   onBookingNotesChange,
+  clientName,
+  clientEmail,
+  clientPhone,
+  onClientNameChange,
+  onClientEmailChange,
+  onClientPhoneChange,
+  bookingError,
 }: {
   bookings: { name: string; option: string; time: string; price: string }[];
   selectedDate: Date | null;
@@ -26,19 +34,19 @@ export default function ConfirmStep({
   onBack: () => void;
   bookingNotes: string;
   onBookingNotesChange: (value: string) => void;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  onClientNameChange: (value: string) => void;
+  onClientEmailChange: (value: string) => void;
+  onClientPhoneChange: (value: string) => void;
+  bookingError: string;
 }) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const paymentMethod = useSelector((state: RootState) => state.paymentMethod.selected);
 
   function getProfessionalName(id: number | undefined) {
-    if (id === undefined) return "Any professional";
-    const professionals = [
-      { id: 0, name: "Any professional" },
-      { id: 1, name: "Banele" },
-      { id: 2, name: "Dineo" },
-      { id: 3, name: "Michelle" },
-    ];
-    return professionals.find(p => p.id === id)?.name || "Any professional";
+    return stylistName(id);
   }
 
   // Payment method display
@@ -62,8 +70,46 @@ export default function ConfirmStep({
       style={{ minHeight: 420 }}
     >
       <h2 className="text-3xl font-bold mb-2 text-[#141414]">Review and confirm</h2>
-      {/* Payment method */}
       <div className="flex flex-col gap-6">
+        <div>
+          <p className="font-semibold text-lg mb-2 text-[#141414]">Your details</p>
+          <div className="flex flex-col gap-3">
+            <label className="text-sm text-[#232323] font-medium" htmlFor="client-name">
+              Name
+              <input
+                id="client-name"
+                className="mt-1 w-full border rounded-lg p-3 text-[#141414] bg-white focus:outline-none focus:ring-1 focus:ring-[#33383C]"
+                value={clientName}
+                onChange={(event) => onClientNameChange(event.target.value)}
+                autoComplete="name"
+              />
+            </label>
+            <label className="text-sm text-[#232323] font-medium" htmlFor="client-email">
+              Email
+              <input
+                id="client-email"
+                type="email"
+                className="mt-1 w-full border rounded-lg p-3 text-[#141414] bg-white focus:outline-none focus:ring-1 focus:ring-[#33383C]"
+                value={clientEmail}
+                onChange={(event) => onClientEmailChange(event.target.value)}
+                autoComplete="email"
+              />
+            </label>
+            <label className="text-sm text-[#232323] font-medium" htmlFor="client-phone">
+              Phone
+              <input
+                id="client-phone"
+                type="tel"
+                className="mt-1 w-full border rounded-lg p-3 text-[#141414] bg-white focus:outline-none focus:ring-1 focus:ring-[#33383C]"
+                value={clientPhone}
+                onChange={(event) => onClientPhoneChange(event.target.value)}
+                autoComplete="tel"
+              />
+            </label>
+          </div>
+          {bookingError && <p className="mt-3 text-sm text-[#9b2c2c]">{bookingError}</p>}
+        </div>
+        {/* Payment method */}
         <div>
           <p className="font-semibold text-lg mb-2 text-[#141414]">Payment method</p>
           <div className="flex flex-row items-center gap-4 bg-[#fafbfc] rounded-xl p-4 border">
@@ -91,7 +137,7 @@ export default function ConfirmStep({
         <div>
           <p className="font-semibold text-lg mb-2 text-[#141414]">Terms and conditions</p>
           <p className="text-sm text-[#7B8487]">
-            Payment is required either upfront by card or at the venue on the day of your appointment. If you need to reschedule or cancel, please notify us at least 24 hours in advance. Late cancellations or no-shows may be subject to a fee.
+            Payment is not taken in this prototype. On the finished site, clients pay by card or at the studio. Reschedule or cancel at least 24 hours ahead.
           </p>
         </div>
         {/* Booking notes */}
