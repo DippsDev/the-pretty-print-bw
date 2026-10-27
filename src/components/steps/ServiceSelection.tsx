@@ -1,7 +1,4 @@
 import React from "react";
-import { Inter_Tight } from "next/font/google";
-
-const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
 interface Service {
   name: string;
@@ -33,10 +30,10 @@ export default function ServiceSelectionStep({ services, onSelectService }: Serv
           return (
             <div
               key={group.label}
-              className="border border-dashed border-[#9a9a9a] rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-[#fafafa] transition"
+              className="booking-card"
               onClick={() => onSelectService(group)}
             >
-              <div className="font-semibold text-base sm:text-lg text-[#141414]">{group.label}</div>
+              <div className="booking-card-title">{group.label}</div>
               {/* List included services */}
               <div className="mt-2">
                 <div className="text-xs font-semibold text-[#232323] mb-1">Includes:</div>
@@ -68,18 +65,18 @@ export default function ServiceSelectionStep({ services, onSelectService }: Serv
         return group.services.map((svc, j) => (
           <div
             key={svc.name}
-            className="border border-dashed border-[#9a9a9a] rounded-lg p-3 sm:p-4 bg-white flex flex-col gap-2 cursor-pointer hover:bg-[#fafafa] transition"
+            className="booking-card"
             onClick={() => onSelectService(svc)}
           >
-            <div className="font-semibold text-base sm:text-lg text-[#141414]">{svc.name}</div>
+            <div className="booking-card-title">{svc.name}</div>
             {svc.description && (
-              <div className="text-sm text-[#7B8487] mt-1">{svc.description}</div>
+              <div className="text-sm text-[#626262]">{svc.description}</div>
             )}
             {svc.timeOptions && svc.timeOptions.length > 0 && (
-              <div className="text-xs uppercase tracking-wide text-[#888]">{svc.timeOptions[0]}</div>
+              <div className="booking-meta">{svc.timeOptions[0]}</div>
             )}
             {svc.price && (
-              <div className="text-sm text-[#232323] font-normal mt-1">
+              <div className="booking-price">
                 {typeof svc.price === "object" && !Array.isArray(svc.price)
                   ? `from ${Object.values(svc.price)[0]}`
                   : Array.isArray(svc.price)

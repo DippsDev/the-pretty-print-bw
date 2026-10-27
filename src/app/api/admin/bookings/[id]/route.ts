@@ -56,8 +56,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
   const body = await request.json().catch(() => null);
   const action = body?.action;
-  if (action !== "cancel" && action !== "refund") {
-    return NextResponse.json({ error: "Choose cancel or refund." }, { status: 400 });
+  if (action !== "cancel" && action !== "refund" && action !== "paid") {
+    return NextResponse.json({ error: "Choose cancel, refund, or paid." }, { status: 400 });
+  }
+
+  if (action === "paid") {
+    const current = await updateBooking(id, () => undefined);
+    if (!current) return NextResponse.json({ error: "Booking not found." }, { status: 404 });
+    if (current.payment === "paid") {
+      return NextResponse.json({ booking: current, message: "This booking is already paid." });
+    }
+    if (current.payment === "refunded") {
+      return NextResponse.json({ error: "A refunded booking cannot be marked paid." }, { status: 400 });
+    }
+    if (current.status === "cancelled") {
+      return NextResponse.json({ error: "A cancelled booking cannot be marked paid." }, { status: 400 });
+    }
+    if (current.paymentMethod === "card") {
+      return NextResponse.json(
+        { error: "Card payments are marked paid when the online payment succeeds." },
+        { status: 400 },
+      );
+    }
+    const booking = await updateBooking(id, (record) => {
+      record.payment = "paid";
+    });
+    return NextResponse.json({ booking, message: "Marked as paid at the studio." });
   }
 
   if (action === "refund") {

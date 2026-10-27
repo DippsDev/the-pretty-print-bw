@@ -69,7 +69,7 @@ export default function ConfirmStep({
       className="flex flex-col gap-8 w-full"
       style={{ minHeight: 420 }}
     >
-      <h2 className="text-3xl font-bold mb-2 text-[#141414]">Review and confirm</h2>
+      <h2 className="booking-heading">Review and confirm</h2>
       <div className="flex flex-col gap-6">
         <div>
           <p className="font-semibold text-lg mb-2 text-[#141414]">Your details</p>
@@ -137,7 +137,7 @@ export default function ConfirmStep({
         <div>
           <p className="font-semibold text-lg mb-2 text-[#141414]">Terms and conditions</p>
           <p className="text-sm text-[#7B8487]">
-            Payment is not taken in this prototype. On the finished site, clients pay by card or at the studio. Reschedule or cancel at least 24 hours ahead.
+            Pay by card now, or pay at the studio when you arrive. Reschedule or cancel at least 24 hours ahead.
           </p>
         </div>
         {/* Booking notes */}

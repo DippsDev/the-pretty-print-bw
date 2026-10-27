@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
   const date = String(body.date || "").trim().slice(0, 40);
   const time = String(body.time || "").trim().slice(0, 40);
   const notes = String(body.notes || "").trim().slice(0, 1000);
+  const paymentMethod = body.paymentMethod === "card" || body.paymentMethod === "venue" ? body.paymentMethod : "";
   const servicesIn = Array.isArray(body.services) ? body.services : [];
 
   if (!clientName || clientName.length > 80) {
@@ -27,6 +28,9 @@ export async function POST(request: NextRequest) {
   }
   if (!date || !time) {
     return NextResponse.json({ error: "Choose a date and time first." }, { status: 400 });
+  }
+  if (!paymentMethod) {
+    return NextResponse.json({ error: "Choose card or pay at the studio." }, { status: 400 });
   }
   if (servicesIn.length < 1 || servicesIn.length > 12) {
     return NextResponse.json({ error: "Choose at least one service." }, { status: 400 });
@@ -50,6 +54,7 @@ export async function POST(request: NextRequest) {
     time,
     notes,
     total,
+    paymentMethod,
   });
 
   return NextResponse.json({ booking });

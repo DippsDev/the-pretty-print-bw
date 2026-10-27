@@ -46,6 +46,11 @@
   animation: wordmark-write 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+.wordmark-name {
+  color: #000;
+  animation: wordmark-tint 5.6s ease-in-out 2.7s forwards;
+}
+
 .wordmark-caret {
   position: absolute;
   top: 0.14em;
@@ -64,6 +69,16 @@
   }
 }
 
+@keyframes wordmark-tint {
+  0% {
+    color: #000;
+  }
+  46%,
+  100% {
+    color: #6b2d91;
+  }
+}
+
 @keyframes wordmark-caret {
   0%,
   18%,
@@ -79,16 +94,84 @@
   }
 }
 
-.page-rise {
-  animation: page-rise 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+.menu-invite-ring,
+.menu-invite-label {
+  position: absolute;
 }
 
-@keyframes page-rise {
-  from {
-    transform: translateY(16px);
+.menu-invite-ring {
+  inset: -10px;
+  border-radius: 999px;
+  border: 1.5px solid #6b2d91;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.menu-invite-label {
+  left: calc(100% + 10px);
+  top: 50%;
+  color: #6b2d91;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.menu-invite {
+  animation: menu-invite-nudge 5.6s cubic-bezier(0.22, 1, 0.36, 1) 2.2s infinite;
+}
+
+.menu-invite .menu-invite-ring {
+  animation: menu-invite-ring 5.6s ease-out 2.2s infinite;
+}
+
+.menu-invite .menu-invite-label {
+  animation: menu-invite-label 5.6s ease-in-out 2.2s infinite;
+}
+
+@keyframes menu-invite-nudge {
+  0%,
+  64%,
+  100% {
+    transform: translateX(0) scale(1);
   }
-  to {
-    transform: none;
+  74%,
+  88% {
+    transform: translateX(6px) scale(1.08);
+  }
+}
+
+@keyframes menu-invite-ring {
+  0%,
+  60% {
+    opacity: 0;
+    transform: scale(0.62);
+  }
+  70% {
+    opacity: 0.7;
+  }
+  94%,
+  100% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
+
+@keyframes menu-invite-label {
+  0%,
+  64%,
+  100% {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-6px);
+  }
+  76%,
+  90% {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
   }
 }
 
@@ -99,11 +182,18 @@
     animation: none;
   }
 
+  .wordmark-name {
+    animation: none;
+    color: #000;
+  }
+
   .wordmark-caret {
     display: none;
   }
 
-  .page-rise {
+  .menu-invite,
+  .menu-invite .menu-invite-ring,
+  .menu-invite .menu-invite-label {
     animation: none;
   }
 }
@@ -122,17 +212,56 @@
   }
 }
 
+html {
+  background: #eeeeec;
+}
+
 body {
   @apply bg-background text-foreground antialiased;
+}
+
+a,
+button,
+[role="button"],
+input,
+textarea,
+select,
+label {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .wireframe {
   --wf-ink: #1a1a1a;
   --wf-muted: #5e5e5e;
-  --wf-paper: #f6f5f3;
+  --wf-paper: #eeeeec;
   --wf-line: #e7e4df;
-  background: var(--wf-paper);
-  color: var(--wf-ink);
+  background: #eeeeec;
+  color: #262626;
+}
+
+.page-transition {
+  min-height: 100dvh;
+  background: #eeeeec;
+}
+
+.page-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #eeeeec;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.page-veil[data-phase="cover"] {
+  opacity: 1;
+  transition: none;
+}
+
+.page-veil[data-phase="reveal"] {
+  opacity: 0;
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .wireframe .border-dashed {
@@ -487,7 +616,81 @@ body {
   transition: bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@media (max-width: 1023px) {
+.studio-chat-panel {
+  padding: 22px 22px 20px;
+  border: 1px solid rgba(37, 34, 30, 0.18);
+  border-radius: 0;
+  background: #fff;
+  color: #262626;
+  box-shadow: 0 16px 40px rgba(37, 34, 30, 0.08);
+}
+
+.studio-chat-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #6e685f;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.studio-chat-kicker span {
+  width: 26px;
+  height: 1px;
+  background: #6e685f;
+}
+
+.studio-chat-title {
+  margin: 16px 0 0;
+  color: #262626;
+  font-family: var(--font-italiana), serif;
+  font-size: 32px;
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.studio-chat-copy {
+  margin: 12px 0 0;
+  color: #625d55;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.studio-chat-action {
+  min-height: 48px;
+  margin-top: 22px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  background: #292621;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.studio-chat-action:hover {
+  background: #555;
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-chat-action:hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 1099px) {
   body[data-booking-sheet="open"] .studio-chat {
     bottom: calc(var(--booking-sheet-height, 11.5rem) + 0.85rem + env(safe-area-inset-bottom, 0px));
   }

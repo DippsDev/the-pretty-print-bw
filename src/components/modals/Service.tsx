@@ -1,8 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Inter_Tight } from "next/font/google";
 import { motion, AnimatePresence } from "framer-motion";
-
-const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
 export type ServiceOption = {
   name: string;
@@ -104,7 +101,7 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.22 }}
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 sm:p-8 flex flex-col min-h-0"
+            className="booking-modal relative w-full max-w-lg mx-4 p-6 sm:p-8 flex flex-col min-h-0"
             style={{
               height: 'auto',
               zIndex: 1,
@@ -113,7 +110,7 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
           >
             <div className="flex items-start justify-between mb-2">
               <div>
-                <h2 className={`text-xl sm:text-2xl font-semibold text-[#141414] ${interTight.className}`}>{service.name}</h2>
+                <h2 className="booking-modal-title">{service.name}</h2>
                 {service.note && (
                   <p className="text-sm text-[#7B8487] mt-2">{service.note}</p>
                 )}
@@ -175,7 +172,7 @@ export default function ServiceModal({ open, onClose, service, onAddBooking }: S
             </div>
             <div className="mt-6 sm:mt-8 flex flex-col items-center">
               <button
-                className={`w-full py-2 rounded-full font-semibold text-sm sm:text-base ${canAdd ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]" : "bg-gray-300 text-gray-600 cursor-not-allowed"}`}
+                className="booking-continue"
                 disabled={!canAdd}
                 onClick={() => {
                   if (canAdd && onAddBooking) {

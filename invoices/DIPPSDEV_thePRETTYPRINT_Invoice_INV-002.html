@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>DIPPSDEV — thePRETTYPRINT Invoice INV-002</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 11mm 14mm 10mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      color: #1a1a1a;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 10.5px;
+      line-height: 1.3;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .brand-name {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-meta {
+      margin: 3px 0 0;
+      font-size: 10.5px;
+      color: #3a3a3a;
+    }
+
+    .doc-title {
+      margin: 0 0 8px;
+      text-align: right;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .meta {
+      width: 280px;
+      margin-left: auto;
+      border: 1px solid #c8c8c8;
+    }
+
+    .meta td {
+      border: 1px solid #c8c8c8;
+      padding: 5px 8px;
+      font-size: 11px;
+    }
+
+    .meta td:first-child {
+      width: 42%;
+      background: #f3f3f3;
+      font-weight: 700;
+    }
+
+    .rule {
+      margin: 10px 0 8px;
+      border: 0;
+      border-top: 1.5px solid #111;
+    }
+
+    .section {
+      margin: 9px 0 3px;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .bill-name {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .bill-org {
+      margin: 1px 0 8px;
+      font-size: 12px;
+    }
+
+    th {
+      background: #111;
+      color: #fff;
+      font-weight: 700;
+      text-align: left;
+      padding: 5px 8px;
+      white-space: nowrap;
+      font-size: 11px;
+      border: 1px solid #111;
+    }
+
+    td {
+      border: 1px solid #d4d4d4;
+      padding: 5px 8px;
+      vertical-align: top;
+    }
+
+    .right { text-align: right; white-space: nowrap; }
+    th.right { text-align: right; }
+
+    .item-title { font-weight: 700; }
+    .item-detail {
+      display: block;
+      margin-top: 2px;
+      font-weight: 400;
+      color: #3f3f3f;
+      font-size: 10.5px;
+    }
+
+    .total td {
+      background: #e8e8e8;
+      font-weight: 700;
+    }
+
+    .label {
+      width: 28%;
+      background: #f3f3f3;
+      font-weight: 700;
+    }
+
+    .schedule-when { width: 42%; }
+
+    .terms {
+      margin: 4px 0 0;
+      padding-left: 16px;
+    }
+
+    .terms li {
+      margin: 0 0 1px;
+      font-size: 10px;
+    }
+
+    .thanks {
+      margin: 10px 0 0;
+      font-style: italic;
+      color: #555;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="brand-name">DIPPSDEV</p>
+      <p class="brand-meta">Phakalane Phase 2, Gaborone</p>
+      <p class="brand-meta">dippsinbox@gmail.com • +267 75 362 329</p>
+    </div>
+    <div>
+      <p class="doc-title">INVOICE</p>
+      <table class="meta">
+        <tr>
+          <td>Invoice No.</td>
+          <td>INV-002</td>
+        </tr>
+        <tr>
+          <td>Date Issued</td>
+          <td>27/10/2026</td>
+        </tr>
+        <tr>
+          <td>Due Date</td>
+          <td>On acceptance</td>
+        </tr>
+      </table>
+    </div>
+  </header>
+
+  <hr class="rule" />
+
+  <p class="section" style="margin-top: 0;">BILL TO</p>
+  <p class="bill-name">thePRETTYPRINT</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="right">Amount (BWP)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <span class="item-title">thePRETTYPRINT Website — development &amp; delivery</span>
+          <span class="item-detail">Custom booking website including a public menu and booking flow (service, stylist, and time), contact page, live admin dashboard for the menu, prices, and bookings, and delivery of the finished site.</span>
+        </td>
+        <td class="right">4,100.00</td>
+      </tr>
+      <tr class="total">
+        <td>Total</td>
+        <td class="right">BWP 4,100.00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="section">PAYMENT TERMS</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Payment Schedule</th>
+        <th>When Due</th>
+        <th class="right">Amount (BWP)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          <span class="item-title">1. Service fee (upfront)</span>
+          <span class="item-detail">Non-refundable deposit for services rendered (60%).</span>
+        </td>
+        <td class="schedule-when">On acceptance of this invoice, before work begins</td>
+        <td class="right">2,460.00</td>
+      </tr>
+      <tr>
+        <td>
+          <span class="item-title">2. Balance</span>
+          <span class="item-detail">Remaining amount to complete the total (40%).</span>
+        </td>
+        <td>On delivery of the website for review</td>
+        <td class="right">1,640.00</td>
+      </tr>
+      <tr class="total">
+        <td>Total Due</td>
+        <td></td>
+        <td class="right">BWP 4,100.00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="section">PAYMENT DETAILS</p>
+  <table>
+    <tr>
+      <td class="label">Bank / Account name</td>
+      <td>MR D B THUPAYATLASE</td>
+    </tr>
+    <tr>
+      <td class="label">Account / Wallet no</td>
+      <td>63169567999</td>
+    </tr>
+    <tr>
+      <td class="label">Bank / Network</td>
+      <td>FNB</td>
+    </tr>
+  </table>
+
+  <p class="section">ADDITIONAL COSTS</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Additional Item</th>
+        <th>Details</th>
+        <th>Cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="item-title">Domain name</span></td>
+        <td>Domain registration normally runs for one year. The first year is handled and paid by the developer. Thereafter, thePRETTYPRINT is responsible for annual renewal.</td>
+        <td>Covered by developer (first year)</td>
+      </tr>
+      <tr>
+        <td><span class="item-title">Hosting</span></td>
+        <td>Hosting / deployment is handled and paid by the developer until a large increase in traffic. After that, thePRETTYPRINT is responsible for ongoing hosting costs unless otherwise agreed.</td>
+        <td>Covered by developer until traffic increases sharply</td>
+      </tr>
+      <tr>
+        <td><span class="item-title">Monthly maintenance</span></td>
+        <td>A monthly maintenance fee will apply after launch. The amount will be discussed and agreed once the website has launched.</td>
+        <td>To be discussed after launch</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="section">TERMS</p>
+  <ul class="terms">
+    <li>The P 2,460.00 service fee (60%) is due upfront and is required before work proceeds.</li>
+    <li>The remaining P 1,640.00 balance (40%) is due once the website has been delivered for review.</li>
+    <li>Domain registration normally runs for one year and is handled and paid by the developer for that first year. After that, thePRETTYPRINT is responsible for annual renewal.</li>
+    <li>Hosting is handled and paid by the developer until a large increase in traffic. After that, thePRETTYPRINT is responsible for ongoing hosting costs so the website can remain online.</li>
+    <li>thePRETTYPRINT is responsible for providing the developer with all media resources and content required for the website, including photographs, logos, studio details, text, and other materials to be included.</li>
+    <li>All media resources and content supplied should be provided in suitable, usable formats and in sufficient quality for implementation.</li>
+    <li>A monthly maintenance fee will apply after launch. The amount will be discussed and agreed once the website has launched.</li>
+    <li>Total development payable: P 4,100.00. The first year of the domain is included as a developer-covered cost, and hosting is covered by the developer until a large increase in traffic. Thereafter those costs are additional. The monthly maintenance fee is separate and is not included in this total.</li>
+  </ul>
+
+  <p class="thanks">Thank you for your business.</p>
+</body>
+</html>

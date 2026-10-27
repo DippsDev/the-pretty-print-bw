@@ -7,9 +7,11 @@ export function useBookingUpdates() {
   const dispatch = useDispatch();
 
   useEffect(() => {
-    // Connect to real-time updates
+    // Connect to real-time updates. EventSource reconnects on its own when
+    // the stream drops (navigation, Fast Refresh). Its error event is an
+    // empty Event, and logging it opens the Next.js error overlay.
     const eventSource = new EventSource('/api/chat/updates');
-    
+
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
@@ -21,11 +23,6 @@ export function useBookingUpdates() {
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error('Booking updates connection error:', error);
-    };
-
-    // Cleanup on unmount
     return () => {
       eventSource.close();
     };

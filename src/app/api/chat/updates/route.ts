@@ -1,37 +1,38 @@
 import { NextRequest } from 'next/server';
 import { getBookingStatus } from '@/lib/chat/bookingStatus';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 // Real-time booking status updates endpoint
 export async function GET(request: NextRequest) {
+  const encoder = new TextEncoder();
+  let interval: ReturnType<typeof setInterval> | undefined;
+
   const stream = new ReadableStream({
     start(controller) {
-      // Send initial booking status
-      const initialStatus = getBookingStatus();
-      controller.enqueue(
-        new TextEncoder().encode(
-          `data: ${JSON.stringify({ type: 'booking-update', data: initialStatus })}\n\n`
-        )
-      );
-
-      // Set up periodic updates (every 5 seconds)
-      const interval = setInterval(() => {
-        const currentStatus = getBookingStatus();
-        controller.enqueue(
-          new TextEncoder().encode(
-            `data: ${JSON.stringify({ type: 'booking-update', data: currentStatus })}\n\n`
-          )
-        );
-      }, 5000);
-
-      // Clean up on client disconnect
-      const cleanup = () => {
-        clearInterval(interval);
+      const send = () => {
+        try {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: 'booking-update', data: getBookingStatus() })}\n\n`
+            )
+          );
+        } catch {
+          // Client already disconnected; enqueue throws once the controller is closed.
+          if (interval) clearInterval(interval);
+        }
       };
 
-      // Handle client disconnect
-      request.signal.addEventListener('abort', cleanup);
-      
-      return cleanup;
+      send();
+      interval = setInterval(send, 5000);
+
+      request.signal.addEventListener('abort', () => {
+        if (interval) clearInterval(interval);
+      });
+    },
+    cancel() {
+      if (interval) clearInterval(interval);
     },
   });
 

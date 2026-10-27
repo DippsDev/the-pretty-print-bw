@@ -61,6 +61,14 @@ export function readBookings() {
   return [...readFile().bookings].reverse();
 }
 
+export function readBooking(id: string) {
+  return readFile().bookings.find((item) => item.id === id) ?? null;
+}
+
+export function findBookingByCheckoutId(checkoutId: string) {
+  return readFile().bookings.find((item) => item.yocoCheckoutId === checkoutId) ?? null;
+}
+
 export function saveGroups(groups: ServiceGroup[]) {
   return withStore((data) => {
     data.groups = groups;

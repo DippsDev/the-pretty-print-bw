@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Inter_Tight } from "next/font/google";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 import { getCalcomEventInfo, resolveProfessionalKey } from "@/lib/calcom/events";
@@ -18,7 +17,6 @@ const PROTOTYPE_SLOTS = [
   "5:00 PM",
 ];
 
-const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
 
 // Helper to get days for the next N days (default: 90 days)
 function getDays(numDays = 90, startDate?: Date) {
@@ -400,7 +398,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
   return (
     <div className="flex w-full min-w-0 max-w-full flex-col overflow-x-hidden">
         <div className="relative mb-8 flex items-start justify-between gap-3 sm:mb-10 sm:items-center">
-          <h2 className="min-w-0 text-2xl font-semibold leading-tight text-[#0d0d0d] sm:text-[28px] sm:leading-9">Select date and time</h2>
+          <h2 className="booking-heading min-w-0">Select date and time</h2>
           <button
             ref={calendarIconRef}
             type="button"
@@ -423,8 +421,8 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               style={{
                 width: "min(320px, calc(100vw - 2rem))",
                 maxWidth: "calc(100vw - 2rem)",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-                fontFamily: interTight.style.fontFamily,
+                boxShadow: "none",
+                borderRadius: 0,
                 outline: "none",
               }}
               tabIndex={-1}
@@ -573,10 +571,10 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
                     disabled={isClosed}
                     className={`flex h-[94px] w-16 flex-col items-center justify-center rounded-2xl border py-3 text-center ${
                       isSelected
-                        ? "border-[#6950F3] bg-[#6950F3] text-white"
+                        ? "border-[#292621] bg-[#292621] text-white"
                         : isClosed
-                          ? "cursor-not-allowed border-[#e5e5e5] bg-white text-[#acacac]"
-                          : "border-[#e5e5e5] bg-white text-[#0d0d0d]"
+                          ? "cursor-not-allowed border-[rgba(37,34,30,0.12)] bg-white text-[#acacac]"
+                          : "border-[rgba(37,34,30,0.18)] bg-white text-[#262626]"
                     }`}
                     onClick={() => {
                       setSelectedDayIdx(idx);
@@ -592,7 +590,7 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
             })}
           </ul>
         </div>
-        <h3 className="mb-3 text-[19px] font-semibold leading-6 text-[#0d0d0d]">Pick a time</h3>
+        <h3 className="booking-kicker mb-3">Pick a time</h3>
         {availabilityLoading && !prototypeSlots ? (
           <div className="flex flex-col items-center justify-center gap-4 mb-8 mt-4 w-full text-sm text-[#7B8487]">
             <div className="text-base font-medium text-[#141414]">Loading available times…</div>
@@ -605,12 +603,12 @@ const TimeSelectionModal: React.FC<TimeSelectionModalProps> = ({
               const isBookable = prototypeSlots || availableTimesForSelectedDay.includes(t);
               const isDisabled = (!isBookable && !isSelected);
               const label = displayTime(t);
-              const baseClasses = "w-full rounded-2xl bg-white px-4 py-4 text-left text-base font-normal leading-snug text-[#0d0d0d]";
+              const baseClasses = "w-full bg-white px-4 py-4 text-left text-sm font-normal leading-snug text-[#262626]";
               const stateClasses = isSelected
-                ? "shadow-[inset_0_0_0_2px_#6950F3]"
+                ? "shadow-[inset_0_0_0_2px_#292621]"
                 : isBookable
-                  ? "shadow-[inset_0_0_0_1px_#e5e5e5]"
-                  : "text-[#acacac] shadow-[inset_0_0_0_1px_#e5e5e5]";
+                  ? "shadow-[inset_0_0_0_1px_rgba(37,34,30,0.18)]"
+                  : "text-[#acacac] shadow-[inset_0_0_0_1px_rgba(37,34,30,0.12)]";
               const disabledClasses = isDisabled && !isSelected ? " opacity-70 cursor-not-allowed" : "";
 
               return (

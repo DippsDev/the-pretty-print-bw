@@ -1,12 +1,11 @@
 "use client"
 
 import React, { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-  setCurrentPage,
   setNavbarOpen,
-  toggleNavbar,
+  setServicesPanelOpen,
   setServiceSelection,
   clearServiceSelection,
 } from '@/redux/features/navigationSlice';
@@ -55,30 +54,20 @@ const fsBrabo = localFont({
 });
 
 // Arrow SVGs
-const ArrowSvg = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width={16} height={16} fill="none" {...props}>
-    <path d="M 5.801 3.801 C 5.983 3.618 6.278 3.618 6.46 3.801 L 10.217 7.559 C 10.399 7.741 10.399 8.037 10.217 8.219 L 6.46 11.977 C 6.278 12.16 5.983 12.16 5.801 11.977 C 5.618 11.795 5.618 11.499 5.801 11.317 L 9.227 7.889 L 5.801 4.461 C 5.618 4.279 5.618 3.983 5.801 3.801 Z" fill="#33383C"/>
-  </svg>
-);
 const ArrowLeftSvg = (props: React.SVGProps<SVGSVGElement>) => (
   <svg width={16} height={16} fill="none" className="rotate-180" {...props}>
     <path d="M 5.801 3.801 C 5.983 3.618 6.278 3.618 6.46 3.801 L 10.217 7.559 C 10.399 7.741 10.399 8.037 10.217 8.219 L 6.46 11.977 C 6.278 12.16 5.983 12.16 5.801 11.977 C 5.618 11.795 5.618 11.499 5.801 11.317 L 9.227 7.889 L 5.801 4.461 C 5.618 4.279 5.618 3.983 5.801 3.801 Z" fill="#33383C"/>
   </svg>
 );
-const InsideArrowSvg = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg width={12} height={12} fill="none" {...props}>
-    <path d="M 15.129 18.131 C 14.856 18.404 14.412 18.404 14.139 18.131 L 8.503 12.495 C 8.23 12.222 8.23 11.778 8.503 11.505 L 14.139 5.869 C 14.412 5.596 14.856 5.596 15.129 5.869 C 15.402 6.142 15.402 6.586 15.129 6.859 L 9.988 12 L 15.129 17.141 C 15.402 17.414 15.402 17.858 15.129 18.131 Z" fill="#33383C"/>
-  </svg>
-);
-
 const Navbar = () => {
   const router = useRouter();
+  const pathname = usePathname();
+  const dispatch = useDispatch();
   const isOpen = useSelector((state: RootState) => state.navigation.navbarOpen);
-  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
-  const [servicesOpen, setServicesOpen] = useState(false);
+  const servicesOpen = useSelector((state: RootState) => state.navigation.servicesPanelOpen);
+  const setServicesOpen = (open: boolean) => dispatch(setServicesPanelOpen(open));
   const [selectedService, setSelectedService] = useState<number | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
-  const dispatch = useDispatch();
   const navRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const lottieRef = useRef<LottieRefCurrentProps>(null);
@@ -101,7 +90,6 @@ const Navbar = () => {
     }
   }, [isOpen]);
 
-  const menuItems = ['Home', 'Services', 'Admin'];
   const [menuServices, setMenuServices] = React.useState(SERVICES);
 
   React.useEffect(() => {
@@ -134,10 +122,6 @@ const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [isOpen, dispatch]);
 
-  const contactBtn =
-    "w-full mt-auto py-2 px-0 rounded-sm text-center font-semibold text-sm sm:text-base transition-all duration-200 " +
-    "bg-[#C34E961A] text-[#C34E96] hover:bg-[#C34E9633] border-none outline-none";
-
   // Responsive width for nav: wider when servicesOpen
   // Use a state variable for navWidth to avoid SSR mismatch
   const [navWidth, setNavWidth] = React.useState<string>("min(60vw, 220px)");
@@ -145,9 +129,12 @@ const Navbar = () => {
   React.useEffect(() => {
     function updateWidth() {
       if (typeof window === "undefined") return;
-      if (window.innerWidth < 640) setNavWidth(servicesOpen ? "90vw" : "80vw");
-      else if (window.innerWidth < 1024) setNavWidth(servicesOpen ? "40vw" : "10vw");
-      else setNavWidth(servicesOpen ? "min(90vw, 400px)" : "min(60vw, 220px)");
+      const width = window.innerWidth;
+      // Two columns need ~460px. Tablet (including iPad portrait and landscape)
+      // was capped at 40vw / 400px, which clipped the package list.
+      if (width < 640) setNavWidth(servicesOpen ? "92vw" : "80vw");
+      else if (width < 1280) setNavWidth(servicesOpen ? "min(92vw, 560px)" : "min(60vw, 240px)");
+      else setNavWidth(servicesOpen ? "min(70vw, 560px)" : "min(60vw, 220px)");
     }
     updateWidth();
     window.addEventListener("resize", updateWidth);
@@ -191,33 +178,49 @@ const Navbar = () => {
     }
   }, [servicesOpen, selectedService]);
 
+  React.useEffect(() => {
+    if (!isOpen && servicesOpen) {
+      setServicesOpen(false);
+    }
+  }, [isOpen, servicesOpen, dispatch]);
+
+  const hideHomeTrigger = pathname === "/" || pathname === "/admin";
+
+  if (pathname === "/book" || pathname.startsWith("/book/") || pathname === "/contact") return null;
+
   return (
     <>
       {/* Menu icon: Lottie animation */}
-      <button
+      {!hideHomeTrigger && <button
         ref={menuButtonRef}
         onClick={() => {
           if (isOpen) {
             dispatch(setNavbarOpen(false));
             setServicesOpen(false);
           } else {
-            dispatch(toggleNavbar());
-            setServicesOpen(false);
+            dispatch(setNavbarOpen(true));
+            setServicesOpen(true);
           }
         }}
-        className="fixed top-6 left-4 sm:left-6 z-[91] p-0 m-0 bg-transparent border-none outline-none w-6 h-6"
-        aria-label="Open navigation"
+        className={`menu-button fixed top-6 left-4 sm:left-6 z-[91] m-0 h-6 w-6 border-none bg-transparent p-0 outline-none ${
+          isOpen ? "" : "menu-invite"
+        }`}
+        aria-label={isOpen ? "Close navigation" : "Open navigation"}
       >
+        <span className="menu-invite-ring" aria-hidden="true" />
+        <span className={`menu-invite-label ${interTight.className}`} aria-hidden="true">
+          Menu
+        </span>
         <MenuLottieIcon lottieRef={lottieRef} />
-      </button>
-      <div
+      </button>}
+      {!hideHomeTrigger && <div
         className={`fixed left-4 sm:left-6 z-[91] top-[56px] h-[1px] bg-white/60
           transition-all duration-500 ease-in-out ${isOpen ? "opacity-100" : "opacity-0"}
           pointer-events-none ml-1`}
         style={{
           width: `calc(${navWidth} - 1.5rem)`,
         }}
-      />
+      />}
 
       {/* Sliding navbar panel */}
       <nav
@@ -237,61 +240,19 @@ const Navbar = () => {
         <div className={`h-full w-full py-2 px-2 sm:px-2 bg-white/90 shadow-xl rounded-md flex flex-col items-start
           transition-all duration-300 ease-in-out backdrop-blur-[4px] relative overflow-hidden`}>
           <div className="mt-16 w-full flex-1 flex flex-col relative">
-            {/* Main menu */}
-            <div className={`w-full absolute inset-0 transition-opacity duration-300 ease-in-out
-              ${servicesOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-              {menuItems.map((item) => (
-                <div key={item} className="mb-3 flex items-center">
-                  <button
-                    onMouseEnter={() => setHoveredItem(item)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                    onClick={() => {
-                      if (item === 'Home') {
-                        router.push('/');
-                        dispatch(setNavbarOpen(false));
-                        return;
-                      }
-                      if (item === 'Services') {
-                        setServicesOpen(true);
-                        return;
-                      }
-                      if (item === 'Admin') {
-                        router.push('/admin');
-                        dispatch(setNavbarOpen(false));
-                      }
-                    }}
-                    className={`menu-item ml-4 text-sm font-medium flex items-center gap-2 w-full justify-between ${interTight.className} ${
-                      hoveredItem && hoveredItem !== item
-                        ? 'text-[#33383C]/50'
-                        : 'text-[#33383C]'
-                    } tracking-[0.01em]`}
-                  >
-                    <span>{item}</span>
-                    {/* Only show arrow for Services */}
-                    {item === "Services" && (
-                      <span className="flex items-center ml-auto">
-                        <ArrowSvg
-                          width={16}
-                          height={16}
-                          className={`transition-transform duration-200 ${servicesOpen ? "rotate-180" : ""}`}
-                        />
-                      </span>
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
-            {/* Services menu */} 
             {servicesOpen && (
               <div className={`w-full transition-all duration-500 ease-in-out
-                absolute top-0 left-0 overflow-hidden
+                absolute inset-0 overflow-x-hidden overflow-y-auto
                 opacity-100 translate-x-0`}
               >
                 <div className="flex flex-row gap-4">
                   {/* First column: Service */}
-                  <div className="flex flex-col min-w-[200px] max-w-[180px] flex-shrink-0">
+                  <div className="flex min-w-0 flex-1 flex-col basis-0">
                     <button
-                      onClick={() => setServicesOpen(false)}
+                      onClick={() => {
+                        dispatch(setNavbarOpen(false));
+                        setServicesOpen(false);
+                      }}
                       className={`flex items-end gap-2 text-sm font-medium text-[#7B8487] hover:text-[#33383C] mb-2 ${interTight.className} transition-colors duration-150`}
                     >
                       <span className="flex items-center">
@@ -324,7 +285,7 @@ const Navbar = () => {
                             setSelectedPackage(null);
                           }
                         }}
-                        className={`flex justify-between items-center w-full text-sm font-medium py-1 px-2 rounded
+                        className={`flex w-full items-center justify-between break-words rounded px-2 py-1 text-left text-sm font-medium
                           transition-colors duration-150
                           ${selectedService === idx ? "text-[#33383C]" : "text-[#33383C]/50"} ${interTight.className}`}
                       >
@@ -335,14 +296,14 @@ const Navbar = () => {
                   </div>
                   {/* Second column: Packages */}
                   {selectedService !== null && menuServices[selectedService] && !menuServices[selectedService].prices && (
-                    <div className="flex flex-col min-w-[180px] max-w-[180px] flex-shrink-0">
+                    <div className="flex min-w-0 flex-[1.15] flex-col basis-0">
                       {menuServices[selectedService].services.map((item: any, i: number) => (
                         <button
                           key={item.name}
                           onClick={() => {
                             setSelectedPackage(i);
                           }}
-                          className={`flex flex-col items-start w-full text-sm font-normal py-1 px-2 rounded
+                          className={`flex w-full flex-col items-start break-words rounded px-2 py-1 text-left text-sm font-normal
                             transition-colors duration-150
                             ${selectedPackage === i ? "text-[#33383C]" : "text-[#33383C]/50"} ${interTight.className}`}
                         >
@@ -359,18 +320,6 @@ const Navbar = () => {
                 </div>
               </div>
             )}
-          </div>
-          <div className={`w-full transition-opacity duration-300 ease-in-out ${servicesOpen ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-            <button
-              onClick={() => {
-                router.push('/contact');
-                dispatch(setNavbarOpen(false));
-                setServicesOpen(false);
-              }}
-              className={contactBtn + ` transition-opacity duration-300 ${isOpen ? "opacity-100" : "opacity-0"}`}
-            >
-              Contact
-            </button>
           </div>
         </div>
       </nav>

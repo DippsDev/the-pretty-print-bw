@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import { Inter_Tight } from "next/font/google";
+import Link from "next/link";
+import { DM_Sans, Italiana } from "next/font/google";
+import { ArrowLeft, Scissors } from "lucide-react";
+import "./../booking.css";
 import { useSelector, useDispatch } from "react-redux";
 import type { RootState } from "@/redux/store";
 import { HOUSE_RULES, SERVICES, type ServiceGroup } from "@/lib/servicesData";
@@ -22,7 +25,17 @@ import ConfirmStep from "@/components/steps/Confirm";
 import AuthModal from "@/components/modals/Auth";
 import { createClient } from "../../../utils/supabase/client"; // use shared client utility
 
-const interTight = Inter_Tight({ subsets: ["latin"], weight: "400" });
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-dm",
+});
+
+const italiana = Italiana({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-italiana",
+});
 
 // Supabase client
 const supabase = createClient();
@@ -136,6 +149,14 @@ function ServicesPage() {
     };
   }, [bookings.length, mobileSheetExpanded]);
   const [prototypeBooked, setPrototypeBooked] = useState(false);
+  const [bookingNote, setBookingNote] = useState("");
+  const paymentMethod = useSelector((state: RootState) => state.paymentMethod.selected);
+  const paymentReturn =
+    searchParams.get("payment") === "cancelled"
+      ? "The card payment was cancelled. The booking stays unpaid until it is paid online or at the studio."
+      : searchParams.get("payment") === "failed"
+        ? "The card payment did not go through. The booking stays unpaid."
+        : "";
   const profileBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -332,6 +353,10 @@ function ServicesPage() {
         setBookingError("Choose a date and time first.");
         return;
       }
+      if (paymentMethod !== "card" && paymentMethod !== "venue") {
+        setBookingError("Choose card or pay at the studio.");
+        return;
+      }
       setSavingBooking(true);
       setBookingError("");
       try {
@@ -346,6 +371,7 @@ function ServicesPage() {
             time: selectedTime,
             notes: bookingNotes,
             total,
+            paymentMethod,
             services: bookings.map((booking, index) => ({
               name: booking.name,
               price: booking.price,
@@ -357,10 +383,26 @@ function ServicesPage() {
           }),
         });
         const body = await response.json().catch(() => ({}));
-        if (!response.ok) {
+        if (!response.ok || !body.booking?.id) {
           setBookingError(body.error || "The booking could not be saved.");
           return;
         }
+        if (paymentMethod === "card") {
+          const checkout = await fetch("/api/yoco/create-checkout", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bookingId: body.booking.id }),
+          });
+          const checkoutBody = (await checkout.json().catch(() => ({}))) as { url?: string; error?: string };
+          if (!checkout.ok || !checkoutBody.url) {
+            setBookingNote(checkoutBody.error || "Online payment could not be started. Pay at the studio instead.");
+            setPrototypeBooked(true);
+            return;
+          }
+          window.location.assign(checkoutBody.url);
+          return;
+        }
+        setBookingNote("Pay at the studio when you arrive.");
         setPrototypeBooked(true);
       } catch {
         setBookingError("The booking could not be saved.");
@@ -412,56 +454,70 @@ function ServicesPage() {
   }
 
   return (
-    <div className={`relative w-full ${interTight.className}`}>
-      {/* Profile icon top right */}
-      {user && (
-        <div className="fixed top-6 right-4 sm:right-8 z-[201]">
-          <button
-            ref={profileBtnRef}
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-[#f5f5f5] hover:bg-[#e5e5e5] border border-[#ededed] shadow-sm transition"
-            onClick={() => setProfileDropdownOpen(v => !v)}
-            aria-haspopup="menu"
-            aria-expanded={profileDropdownOpen}
-            aria-label="User menu"
-            type="button"
-          >
-            {/* Simple user icon */}
-            <svg width="28" height="28" fill="none" viewBox="0 0 32 32">
-              <circle cx="16" cy="12" r="6" fill="#33383C"/>
-              <rect x="7" y="22" width="18" height="6" rx="3" fill="#33383C"/>
-            </svg>
-          </button>
-          {/* Dropdown */}
-          {profileDropdownOpen && (
-            <div
-              className="absolute right-0 mt-2 w-48 bg-white border border-[#ededed] rounded-xl shadow-lg z-[202] py-2"
-              style={{ minWidth: 180 }}
-              tabIndex={-1}
-              onBlur={e => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) setProfileDropdownOpen(false);
-              }}
+    <div className={`booking-page relative w-full ${dmSans.variable} ${italiana.variable} ${dmSans.className}`}>
+      <header className="booking-masthead">
+        <div className="booking-masthead-inner">
+        <Link href="/" className="booking-brand booking-home" aria-label="Return to the studio">
+          <Scissors size={19} strokeWidth={1.5} />
+          <span>thePRETTYPRINT</span>
+          <small>
+            <span className="booking-home-quiet">Hair studio</span>
+            <span className="booking-home-leave">
+              Return home
+              <ArrowLeft size={11} strokeWidth={1.5} />
+            </span>
+          </small>
+        </Link>
+        {user ? (
+          <div className="relative z-[201]">
+            <button
+              ref={profileBtnRef}
+              className="booking-round flex items-center justify-center w-10 h-10 rounded-full bg-[#eeeeec] hover:bg-[#e4e3df] border border-[rgba(37,34,30,0.18)] transition"
+              onClick={() => setProfileDropdownOpen(v => !v)}
+              aria-haspopup="menu"
+              aria-expanded={profileDropdownOpen}
+              aria-label="User menu"
+              type="button"
             >
-              <div className="px-4 py-2 text-sm font-semibold text-[#232323] border-b border-[#ededed]">
-                {user.user_metadata?.full_name || user.email}
-              </div>
-              <button
-                className="w-full text-left px-4 py-2 text-[#d32f2f] hover:bg-[#f9eaea] rounded-b-xl text-sm font-medium transition"
-                onClick={handleLogout}
-                type="button"
-                role="menuitem"
+              <svg width="28" height="28" fill="none" viewBox="0 0 32 32">
+                <circle cx="16" cy="12" r="6" fill="#33383C"/>
+                <rect x="7" y="22" width="18" height="6" rx="3" fill="#33383C"/>
+              </svg>
+            </button>
+            {profileDropdownOpen && (
+              <div
+                className="absolute right-0 mt-2 w-48 bg-white border border-[#ededed] rounded-xl shadow-lg z-[202] py-2"
+                style={{ minWidth: 180 }}
+                tabIndex={-1}
+                onBlur={e => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) setProfileDropdownOpen(false);
+                }}
               >
-                Log out
-              </button>
-            </div>
-          )}
+                <div className="px-4 py-2 text-sm font-semibold text-[#232323] border-b border-[#ededed]">
+                  {user.user_metadata?.full_name || user.email}
+                </div>
+                <button
+                  className="w-full text-left px-4 py-2 text-[#d32f2f] hover:bg-[#f9eaea] rounded-b-xl text-sm font-medium transition"
+                  onClick={handleLogout}
+                  type="button"
+                  role="menuitem"
+                >
+                  Log out
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="booking-header-label">Booking</span>
+        )}
         </div>
-      )}
-      <div className="flex w-full min-w-0 flex-col bg-[#f5f5f5] min-h-[100dvh] lg:flex-row lg:items-start lg:justify-center lg:gap-8 lg:px-10 lg:pt-16">
+      </header>
+      <div className="booking-shell flex w-full min-w-0 flex-col min-h-[100dvh] min-[1100px]:flex-row min-[1100px]:items-start min-[1100px]:gap-8 min-[1100px]:px-8 min-[1100px]:pt-10">
         {/* Main content (left side + center) */}
-        <div className="flex min-w-0 w-full flex-1 flex-col overflow-x-hidden px-4 pt-16 pb-48 sm:px-6 lg:max-w-[680px] lg:flex-none lg:px-0 lg:pt-0 lg:pb-16">
+        <div className="flex min-w-0 w-full flex-1 flex-col overflow-x-hidden px-4 pt-8 pb-48 sm:px-8 min-[1100px]:px-0 min-[1100px]:pt-0 min-[1100px]:pb-16">
           {/* Progress tracker */}
-          <div className="mb-6 flex w-full overflow-x-auto">
-            <ul className="flex min-w-max flex-row items-center gap-0">
+          <div className="mb-8 flex w-full overflow-x-auto">
+            <ul className="booking-steps flex min-w-max flex-row items-center gap-0">
               {[
                 { label: 'Services' },
                 { label: 'Stylist' },
@@ -470,15 +526,16 @@ function ServicesPage() {
               ].map((stepObj, idx) => (
                 <li key={stepObj.label} className="flex items-center">
                   <button
-                    className={`font-medium text-xs sm:text-sm whitespace-nowrap transition-colors px-0 bg-transparent border-none outline-none ${
-                      step === 'services' && idx === 0 ||
-                      step === 'professionals' && idx === 1 ||
-                      step === 'time' && idx === 2 ||
-                      step === 'confirm' && idx === 3
-                        ? 'text-[#141414]'
-                        : canGoToStep(idx) ? 'text-[#7B8487] hover:text-[#232323] cursor-pointer' : 'text-[#d1d5db] cursor-not-allowed'
-                    }`}
-                    style={{ padding: 0, margin: 0 }}
+                    className="booking-step"
+                    data-active={
+                      (step === 'services' && idx === 0) ||
+                      (step === 'professionals' && idx === 1) ||
+                      (step === 'time' && idx === 2) ||
+                      (step === 'confirm' && idx === 3)
+                        ? "true"
+                        : "false"
+                    }
+                    data-enabled={canGoToStep(idx) ? "true" : "false"}
                     disabled={!canGoToStep(idx)}
                     onClick={() => {
                       if (!canGoToStep(idx)) return;
@@ -501,12 +558,14 @@ function ServicesPage() {
             </ul>
           </div>
 
+          {paymentReturn && <p className="booking-panel mb-6 text-sm text-[#262626]">{paymentReturn}</p>}
+
           {prototypeBooked ? (
             <div className="wf-frame max-w-xl">
               <p className="wf-kicker">Confirmed</p>
               <h2 className="text-2xl font-semibold">Booking received</h2>
               <p className="mt-2 text-sm text-[#5c5c5c]">
-                The studio has this booking.
+                The studio has this booking. {bookingNote}
               </p>
               <ul className="mt-4 flex flex-col gap-2">
                 {bookings.map((booking, index) => (
@@ -525,6 +584,7 @@ function ServicesPage() {
                   setSelectedDate(null);
                   setSelectedTime(null);
                   setBookingNotes("");
+                  setBookingNote("");
                   setPrototypeBooked(false);
                   setStep("services");
                 }}
@@ -546,7 +606,7 @@ function ServicesPage() {
                 <p className="wf-note">
                   Choose a style. Prices are in pula.
                 </p>
-                <ul className="flex flex-col gap-1 rounded-2xl bg-white px-4 py-3 text-sm leading-snug text-[#555]">
+                <ul className="booking-rules flex flex-col gap-1">
                   {HOUSE_RULES.map((rule) => (
                     <li key={rule}>{rule}</li>
                   ))}
@@ -563,17 +623,8 @@ function ServicesPage() {
                       {serviceCategories.map((cat, idx) => (
                         <li key={cat} role="tab" aria-selected={activeCategory === idx} className="shrink-0">
                           <button
-                            className={`
-                              px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-sm sm:text-base font-semibold whitespace-nowrap transition-colors
-                              ${activeCategory === idx
-                                ? "bg-[#141414] text-white"
-                                : "bg-transparent text-[#141414] hover:bg-[#ededed]"}
-                            `}
-                            style={{
-                              fontFamily: interTight.style.fontFamily,
-                              boxShadow: "none",
-                              border: "none",
-                            }}
+                            className="booking-chip"
+                            data-active={activeCategory === idx ? "true" : "false"}
                             onClick={() => {
                               setActiveCategory(idx);
                               scrollTabIntoView(idx);
@@ -616,7 +667,7 @@ function ServicesPage() {
                 </div>
                 {/* Services under selected category */}
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 text-[#141414]">{groups[activeCategory]?.label}</h2>
+                  <h2 className="booking-heading">{groups[activeCategory]?.label}</h2>
                   <ServiceSelectionStep
                     services={groups[activeCategory] ? [groups[activeCategory]] : []}
                     onSelectService={svc => {
@@ -636,7 +687,7 @@ function ServicesPage() {
                 transition={{ duration: 0.22, ease: "easeOut" }}
                 className="flex flex-col gap-4 sm:gap-6 flex-1"
               >
-                <h2 className="text-xl sm:text-2xl font-bold mb-2 text-[#141414]">Select stylist</h2>
+                <h2 className="booking-heading">Select stylist</h2>
                 <ProfessionalSelection
                   onBack={() => setStep('services')}
                   onSelect={id => {
@@ -734,11 +785,11 @@ function ServicesPage() {
           )}
         </div>
         {/* Right: Summary box sticks with the page on desktop, bottom sheet on mobile */}
-        <div className="hidden w-[360px] shrink-0 lg:sticky lg:top-6 lg:block lg:self-start">
-          <div className="flex min-h-[560px] flex-col rounded-2xl bg-white p-6 shadow-[0_8px_28px_rgba(0,0,0,0.06)]">
+        <div className="hidden w-[300px] shrink-0 min-[1100px]:sticky min-[1100px]:top-6 min-[1100px]:block min-[1100px]:self-start xl:w-[360px]">
+          <div className="booking-summary">
             <div className="mb-6">
-              <div className="text-base font-semibold text-[#141414]">thePRETTYPRINT</div>
-              <p className="mt-0.5 text-sm text-[#7B8487]">Hair studio</p>
+              <div className="booking-wordmark">thePRETTYPRINT</div>
+              <p className="booking-kicker">Hair studio</p>
             </div>
             <div className="flex flex-col gap-4">
               {bookings.length === 0 ? (
@@ -769,9 +820,9 @@ function ServicesPage() {
                 ))
               )}
             </div>
-            <div className="mt-5 flex items-center justify-between border-t border-[#ededed] pt-4">
-              <span className="font-semibold text-[#141414]">Total</span>
-              <span className="font-semibold text-[#141414]">
+            <div className="booking-total">
+              <span>Total</span>
+              <span>
                 {total > 0 ? `P${Number.isInteger(total) ? total.toFixed(0) : total.toFixed(2)}` : "Free"}
               </span>
             </div>
@@ -782,16 +833,7 @@ function ServicesPage() {
               </p>
             )}
             <button
-              className={`mt-auto w-full rounded-full py-3.5 text-base font-semibold ${
-                bookings.length > 0 && !prototypeBooked &&
-                (
-                  (step !== 'time' && step !== 'confirm') ||
-                  (step === 'time' && selectedDate && selectedTime) ||
-                  (step === 'confirm')
-                )
-                  ? "bg-[#141414] text-white hover:bg-[#000]"
-                  : "cursor-not-allowed bg-[#d5d5d5] text-white"
-              }`}
+              className="booking-continue"
               disabled={
                 savingBooking ||
                 prototypeBooked ||
@@ -815,7 +857,7 @@ function ServicesPage() {
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
               ref={mobileSheetRef}
-              className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-[#ededed] shadow-2xl z-[100] safe-area-inset-bottom"
+              className="booking-sheet min-[1100px]:hidden fixed bottom-0 left-0 right-0 z-[100] safe-area-inset-bottom"
               style={{ maxHeight: mobileSheetExpanded ? '70vh' : 'auto' }}
             >
               {/* Expandable header */}
@@ -948,16 +990,7 @@ function ServicesPage() {
               {/* Continue button */}
               <div className="px-4 py-4 border-t border-[#ededed]">
                 <button
-                  className={`w-full py-3 rounded-full font-semibold text-base ${
-                    bookings.length > 0 && !prototypeBooked &&
-                    (
-                      (step !== 'time' && step !== 'confirm') ||
-                      (step === 'time' && selectedDate && selectedTime) ||
-                      (step === 'confirm')
-                    )
-                      ? "bg-[#33383C] text-white cursor-pointer hover:bg-[#232323]"
-                      : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                  }`}
+                  className="booking-continue"
                   disabled={
                     savingBooking ||
                     prototypeBooked ||

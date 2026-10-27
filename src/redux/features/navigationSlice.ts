@@ -3,6 +3,7 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 interface NavigationState {
   currentPage: string;
   navbarOpen: boolean;
+  servicesPanelOpen: boolean;
   selectedService?: string;
   selectedPackage?: string;
   selectedTime?: string;
@@ -13,6 +14,7 @@ interface NavigationState {
 const initialState: NavigationState = {
   currentPage: 'home',
   navbarOpen: false,
+  servicesPanelOpen: false,
   selectedService: undefined,
   selectedPackage: undefined,
   selectedTime: undefined,
@@ -32,6 +34,9 @@ export const navigationSlice = createSlice({
     },
     toggleNavbar: (state) => {
       state.navbarOpen = !state.navbarOpen;
+    },
+    setServicesPanelOpen: (state, action: PayloadAction<boolean>) => {
+      state.servicesPanelOpen = action.payload;
     },
     setServiceSelection: (
       state,
@@ -59,6 +64,7 @@ export const {
   setCurrentPage,
   setNavbarOpen,
   toggleNavbar,
+  setServicesPanelOpen,
   setServiceSelection,
   clearServiceSelection,
   setCurrentSection,

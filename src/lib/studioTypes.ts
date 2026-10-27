@@ -17,6 +17,7 @@ export type StudioBooking = {
   total: number;
   status: "confirmed" | "cancelled";
   payment: "unpaid" | "paid" | "refunded";
+  paymentMethod?: "card" | "venue";
   yocoCheckoutId?: string;
   calUid?: string;
   refundAmount?: number;

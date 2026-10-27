@@ -21,7 +21,7 @@ export default function ProfessionalPerServiceStep({
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      <h2 className="text-2xl font-bold mb-2 text-[#141414]">Assign professionals per service</h2>
+      <h2 className="booking-heading">Assign professionals per service</h2>
       <div className="flex flex-col gap-4">
         {bookings.map((b, i) => (
           <div key={i} className="border rounded-lg p-4 bg-white flex flex-row items-center gap-4">
